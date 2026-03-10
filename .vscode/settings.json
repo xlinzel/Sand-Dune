@@ -1,0 +1,5 @@
+{
+    "cmake.configureArgs": [
+        "-DCMAKE_TOOLCHAIN_FILE=C:/Users/xlinzel/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    ]
+}
