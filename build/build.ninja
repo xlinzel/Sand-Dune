@@ -112,6 +112,15 @@ build CMakeFiles\dune_core.dir\src\sun\mask.cpp.obj: CXX_COMPILER__dune_core_uns
   TARGET_COMPILE_PDB = CMakeFiles\dune_core.dir\dune_core.pdb
   TARGET_PDB = dune_core.pdb
 
+build CMakeFiles\dune_core.dir\src\wind\vectorfield.cpp.obj: CXX_COMPILER__dune_core_unscanned_Debug C$:\Users\xlinzel\Desktop\BOS\Sand$ Dune\src\wind\vectorfield.cpp || cmake_object_order_depends_target_dune_core
+  CONFIG = Debug
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd
+  INCLUDES = -I"C:\Users\xlinzel\Desktop\BOS\Sand Dune\include" -IC:\Users\xlinzel\vcpkg\installed\x86-windows\include -external:IC:\Users\xlinzel\vcpkg\buildtrees\eigen3\src\5.0.1-d487a628b0.clean -external:W0
+  OBJECT_DIR = CMakeFiles\dune_core.dir
+  OBJECT_FILE_DIR = CMakeFiles\dune_core.dir\src\wind
+  TARGET_COMPILE_PDB = CMakeFiles\dune_core.dir\dune_core.pdb
+  TARGET_PDB = dune_core.pdb
+
 
 # =============================================================================
 # Link build statements for STATIC_LIBRARY target dune_core
@@ -120,7 +129,7 @@ build CMakeFiles\dune_core.dir\src\sun\mask.cpp.obj: CXX_COMPILER__dune_core_uns
 #############################################
 # Link the static library dune_core.lib
 
-build dune_core.lib: CXX_STATIC_LIBRARY_LINKER__dune_core_Debug CMakeFiles\dune_core.dir\src\grains\piv.cpp.obj CMakeFiles\dune_core.dir\src\grains\reconstruction.cpp.obj CMakeFiles\dune_core.dir\src\grains\validation.cpp.obj CMakeFiles\dune_core.dir\src\sun\colormap.cpp.obj CMakeFiles\dune_core.dir\src\sun\image.cpp.obj CMakeFiles\dune_core.dir\src\sun\lib\stb.cpp.obj CMakeFiles\dune_core.dir\src\sun\mask.cpp.obj
+build dune_core.lib: CXX_STATIC_LIBRARY_LINKER__dune_core_Debug CMakeFiles\dune_core.dir\src\grains\piv.cpp.obj CMakeFiles\dune_core.dir\src\grains\reconstruction.cpp.obj CMakeFiles\dune_core.dir\src\grains\validation.cpp.obj CMakeFiles\dune_core.dir\src\sun\colormap.cpp.obj CMakeFiles\dune_core.dir\src\sun\image.cpp.obj CMakeFiles\dune_core.dir\src\sun\lib\stb.cpp.obj CMakeFiles\dune_core.dir\src\sun\mask.cpp.obj CMakeFiles\dune_core.dir\src\wind\vectorfield.cpp.obj
   CONFIG = Debug
   LANGUAGE_COMPILE_FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
   LINK_FLAGS = /machine:X86
@@ -181,6 +190,7 @@ build cmake_object_order_depends_target_run_tests: phony || cmake_object_order_d
 
 build CMakeFiles\run_tests.dir\tests\test.cpp.obj: CXX_COMPILER__run_tests_unscanned_Debug C$:\Users\xlinzel\Desktop\BOS\Sand$ Dune\tests\test.cpp || cmake_object_order_depends_target_run_tests
   CONFIG = Debug
+  DEFINES = -DPROJECT_DIR="\"C:/Users/xlinzel/Desktop/BOS/Sand Dune\""
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd
   INCLUDES = -I"C:\Users\xlinzel\Desktop\BOS\Sand Dune\include" -IC:\Users\xlinzel\vcpkg\installed\x86-windows\include -external:IC:\Users\xlinzel\vcpkg\buildtrees\eigen3\src\5.0.1-d487a628b0.clean -external:W0
   OBJECT_DIR = CMakeFiles\run_tests.dir

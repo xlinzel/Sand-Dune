@@ -32,3 +32,7 @@ target_link_libraries(sand_dune PRIVATE
 file(GLOB TEST_SOURCES "tests/*.cpp")
 add_executable(run_tests ${TEST_SOURCES})
 target_link_libraries(run_tests PRIVATE dune_core)
+
+target_compile_definitions(run_tests PRIVATE 
+    PROJECT_DIR="${CMAKE_SOURCE_DIR}"
+)

@@ -2,6 +2,7 @@
 #include <lib/doctest.h>
 #include <sun/image.h>
 #include <sun/mask.h>
+#include <grains/piv.h>
 #include <iostream>
 #include <vector>
 
@@ -9,7 +10,7 @@ TEST_CASE("Image Loading")
 {
     //Initializaiton and then load
     Image image;
-    std::string output = image.Load("../images/image.bmp");
+    std::string output = image.Load((std::string(PROJECT_DIR) + "/images/image.bmp").c_str());
 
     CHECK(output.empty());        //Empty string = success
     CHECK(image.GetLoaded());
@@ -39,4 +40,49 @@ TEST_CASE("Mask Generation")
     CHECK(result(60, 50) == 1.0f);
     CHECK(result(70, 60) == 0.0f);
     CHECK(result(0, 0) == 0.0f);
+}
+
+TEST_CASE("PIV Computation")
+{
+    SUBCASE("Parameters")
+    {
+        PIV piv(64, 48, 80);
+        CHECK(piv.GetWindowSize() == 64);
+        CHECK(piv.GetOverlap() == 48);
+        CHECK(piv.GetSearchSize() == 80);
+
+        piv.SetWindowSize(32);
+        CHECK(piv.GetWindowSize() == 32);
+    }
+
+    SUBCASE("Zero Displacement")
+    {
+        // Identical images should produce near-zero displacement
+        Eigen::MatrixXf img = Eigen::MatrixXf::Random(200, 200);
+        PIV piv(64, 48, 80);
+        VectorField result = piv.Compute(img, img);
+
+        std::cout << "U vector maxcoeff: " << result.u.cwiseAbs().maxCoeff() << std::endl;
+        std::cout << "V vector maxcoeff: " << result.v.cwiseAbs().maxCoeff() << std::endl;
+
+        CHECK(result.u.cwiseAbs().maxCoeff() < 1.0f);
+        CHECK(result.v.cwiseAbs().maxCoeff() < 1.0f);
+    }
+
+    SUBCASE("Known Displacement")
+    {
+        // Shift flow image by 5 pixels horizontally
+        Eigen::MatrixXf ref = Eigen::MatrixXf::Random(200, 200);
+        Eigen::MatrixXf flow = Eigen::MatrixXf::Zero(200, 200);
+        flow.block(0, 5, 200, 195) = ref.block(0, 0, 200, 195);
+
+        PIV piv(64, 48, 80);
+        VectorField result = piv.Compute(ref, flow);
+
+        // Centre window should detect ~5px horizontal displacement
+        int centre_row = result.u.rows() / 2;
+        int centre_col = result.u.cols() / 2;
+        CHECK(result.u(centre_row, centre_col) == doctest::Approx(5.0f).epsilon(1.0f));
+        CHECK(result.v(centre_row, centre_col) == doctest::Approx(0.0f).epsilon(1.0f));
+    }
 }
