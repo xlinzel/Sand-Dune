@@ -148,11 +148,11 @@ Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, con
     fftwf_execute(ref_plan);
     fftwf_execute(flow_plan);
 
-    //Actual Cross Correlation (fourier * inv_fourier)
+    //Actual Cross Correlation (ref* x flow)
     for(int i = 0; i < rows * freq_cols; i++)
     {
         product[i][0] = ref_out[i][0] * flow_out[i][0] + ref_out[i][1] * flow_out[i][1];
-        product[i][1] = ref_out[i][1] * flow_out[i][0] - ref_out[i][0] * flow_out[i][1];
+        product[i][1] = ref_out[i][0] * flow_out[i][1] - ref_out[i][1] * flow_out[i][0];
     }
 
     fftwf_execute(inv_plan);
@@ -176,8 +176,6 @@ Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, con
 
     return ccmap_shifted;
 }
-
-
 
 Eigen::MatrixXf PIV::CrossCorrelationSpatial(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow)
 {
@@ -217,13 +215,49 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
 
     float peak = ccmap.maxCoeff(&row, &col);
 
-    if (row == 0 || row == ccmap.rows() - 1 || col == 0 || col == ccmap.cols() - 1)
+    if ((row == 0 || row == ccmap.rows() - 1 || col == 0 || col == ccmap.cols() - 1))
     {
-        return PeakResult{float(col - ccmap.cols()/2), float(row - ccmap.rows()/2), peak / ccmap.mean()};
+        //SCC PPR singal to noise ratio calculations
+        Eigen::MatrixXf ccmap_flattened = ccmap.array() - ccmap.minCoeff();
+
+        //Get the peak on the subtracted plane
+        peak = ccmap_flattened.maxCoeff();
+
+        int mask_size = 5;
+        int r0 = std::max(0, row - mask_size);
+        int c0 = std::max(0, col - mask_size);
+        int r1 = std::min(ccmap.rows(), row + mask_size + 1);
+        int c1 = std::min(ccmap.cols(), col + mask_size + 1);
+
+        ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
+
+        float second_peak = ccmap_flattened.maxCoeff();
+
+        float sig2noise = peak / second_peak;
+        
+        return PeakResult{float(col - ccmap.cols()/2), float( - row - ccmap.rows()/2), sig2noise};
     }
     else if (ccmap(row, col-1) <= 0 || ccmap(row, col+1) <= 0 || ccmap(row-1, col) <= 0 || ccmap(row+1, col) <= 0)
     {
-        return PeakResult{float(col - ccmap.cols()/2), float(row - ccmap.rows()/2), peak / ccmap.mean()};
+        //SCC PPR singal to noise ratio calculations
+        Eigen::MatrixXf ccmap_flattened = ccmap.array() - ccmap.minCoeff();
+
+        //Get the peak on the subtracted plane
+        peak = ccmap_flattened.maxCoeff();
+
+        int mask_size = 5;
+        int r0 = std::max(0, row - mask_size);
+        int c0 = std::max(0, col - mask_size);
+        int r1 = std::min(ccmap.rows(), row + mask_size + 1);
+        int c1 = std::min(ccmap.cols(), col + mask_size + 1);
+
+        ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
+
+        float second_peak = ccmap_flattened.maxCoeff();
+
+        float sig2noise = peak / second_peak;
+
+        return PeakResult{float(col - ccmap.cols()/2), float(row - ccmap.rows()/2), sig2noise};
     }
 
     //Gaussian Interpolation
@@ -233,14 +267,29 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
     float y_interp = row + (std::log(ccmap(row - 1, col)) - std::log(ccmap(row + 1, col)))
                             / (2 * std::log(ccmap(row - 1, col)) - 4 * std::log(ccmap(row, col)) + 2 * std::log(ccmap(row + 1, col)));
 
-    float u = ccmap.cols() / 2 - x_interp; //Reversed to expected since cc measures reference field releative to flow
-    float v = ccmap.rows() / 2 - y_interp; // --
+    float u = x_interp - ccmap.cols() / 2;
+    float v = y_interp - ccmap.rows() / 2;
+    
+    //SCC PPR singal to noise ratio calculations
+    Eigen::MatrixXf ccmap_flattened = ccmap.array() - ccmap.minCoeff();
 
-    float sig2noise = peak / ccmap.mean();
+    //Get the peak on the subtracted plane
+    peak = ccmap_flattened.maxCoeff();
+
+    int mask_size = 5;
+    int r0 = std::max(0, row - mask_size);
+    int c0 = std::max(0, col - mask_size);
+    int r1 = std::min(ccmap.rows(), row + mask_size + 1);
+    int c1 = std::min(ccmap.cols(), col + mask_size + 1);
+
+    ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
+
+    float second_peak = ccmap_flattened.maxCoeff();
+
+    float sig2noise = peak / second_peak;
 
     return PeakResult{u, v, sig2noise};
 }
-
 
 int PIV::GetWindowSize() const
 {

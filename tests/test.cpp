@@ -82,7 +82,15 @@ TEST_CASE("PIV Computation")
         // Centre window should detect ~5px horizontal displacement
         int centre_row = result.u.rows() / 2;
         int centre_col = result.u.cols() / 2;
-        CHECK(result.u(centre_row, centre_col) == doctest::Approx(5.0f).epsilon(1.0f));
-        CHECK(result.v(centre_row, centre_col) == doctest::Approx(0.0f).epsilon(1.0f));
+        CHECK(result.u.mean() == doctest::Approx(5.0f).epsilon(1.0f));
+        CHECK(result.v.mean() == doctest::Approx(0.0f).epsilon(1.0f));
+
+        std::cout << "===================Computing Test Mapping===================" << std::endl;
+        std::cout << "U Vector Map: " << std::endl;
+        std::cout << result.u << std::endl << std::endl;
+        std::cout << "V Vector Map: " << std::endl;
+        std::cout << result.v << std::endl << std::endl;
+        std::cout << "Sig2noise Vector Map: " << std::endl;
+        std::cout << result.s2n << std::endl << std::endl;
     }
 }
