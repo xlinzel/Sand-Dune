@@ -1,49 +1,49 @@
 [
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\piv.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\piv.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\piv.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\piv.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/grains/piv.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/grains/piv.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\reconstruction.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\reconstruction.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\reconstruction.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\reconstruction.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/grains/reconstruction.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/grains/reconstruction.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\validation.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\validation.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\validation.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\validation.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/grains/validation.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/grains/validation.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\colormap.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\colormap.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\colormap.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\colormap.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/colormap.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/colormap.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\image.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\image.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\image.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\image.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/image.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/image.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\lib\\stb.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\lib\\stb.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\lib\\stb.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\lib\\stb.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/lib/stb.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/lib/stb.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\mask.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\mask.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\mask.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\mask.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/mask.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/mask.cpp.obj"
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\wind\\vectorfield.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\wind\\vectorfield.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\wind\\vectorfield.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\wind\\vectorfield.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/wind/vectorfield.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/wind/vectorfield.cpp.obj"
 },
@@ -55,7 +55,7 @@
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
-  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -DPROJECT_DIR=\"\\\"C:/Users/xlinzel/Desktop/BOS/Sand Dune\\\"\" -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\run_tests.dir\\tests\\test.cpp.obj /FdCMakeFiles\\run_tests.dir\\ /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\tests\\test.cpp\"",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -DPROJECT_DIR=\"\\\"C:/Users/xlinzel/Desktop/BOS/Sand Dune\\\"\" -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\buildtrees\\eigen3\\src\\5.0.1-d487a628b0.clean -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\run_tests.dir\\tests\\test.cpp.obj /FdCMakeFiles\\run_tests.dir\\ /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\tests\\test.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/tests/test.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/run_tests.dir/tests/test.cpp.obj"
 }

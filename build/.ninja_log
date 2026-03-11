@@ -1,15 +1,24 @@
 # ninja log v6
-27	1854	7948571850682496	CMakeFiles/dune_core.dir/src/grains/reconstruction.cpp.obj	1d783d4c3b3c306
-28	4896	7948799609862123	CMakeFiles/dune_core.dir/src/grains/piv.cpp.obj	b1e569fb92f7a61f
-3017	3181	7948801509170724	dune_core.lib	344165bab23487b8
-62	1906	7948571851042143	CMakeFiles/dune_core.dir/src/sun/colormap.cpp.obj	b967997ed042a00b
-46	1900	7948571850894548	CMakeFiles/dune_core.dir/src/grains/validation.cpp.obj	347d7f52cfe3dc4c
-34	3621	7948596802943548	CMakeFiles/dune_core.dir/src/sun/mask.cpp.obj	2520a13abfead6bb
-95	1939	7948571851384618	CMakeFiles/dune_core.dir/src/sun/lib/stb.cpp.obj	d97e07f9006b8947
-77	2612	7948571851080957	CMakeFiles/dune_core.dir/src/sun/image.cpp.obj	818131a8bd9af4f9
-74	5313	7948799610270947	CMakeFiles/run_tests.dir/tests/test.cpp.obj	358c299e57d193d0
+118	3081	7949595437670091	CMakeFiles/dune_core.dir/src/grains/reconstruction.cpp.obj	bc681b0c99733325
+8393	8693	7949595520414591	dune_core.lib	344165bab23487b8
+54	8392	7949595437029973	CMakeFiles/dune_core.dir/src/grains/piv.cpp.obj	f23ccf28c2015fa3
+150	2893	7949595437985417	CMakeFiles/dune_core.dir/src/grains/validation.cpp.obj	28c1cf7481cf9a0e
+174	2869	7949595438231253	CMakeFiles/dune_core.dir/src/sun/colormap.cpp.obj	790f0974d1c765e8
+250	7593	7949595438963887	CMakeFiles/dune_core.dir/src/sun/mask.cpp.obj	99927b827d7e0a99
+198	4983	7949595438470980	CMakeFiles/dune_core.dir/src/sun/image.cpp.obj	cfcc37f84f425c8d
+224	2957	7949595438724424	CMakeFiles/dune_core.dir/src/sun/lib/stb.cpp.obj	b2ae395ffa8097c6
+313	9751	7949595439577730	CMakeFiles/run_tests.dir/tests/test.cpp.obj	b7cb6a902d03ed6
 3181	4907	7948801510732607	run_tests.exe	acac67674bb22f73
 23	1512	7948572457265617	CMakeFiles/sand_dune.dir/src/main.cpp.obj	8340c3a397d94997
-5180	6873	7948799661442799	sand_dune.exe	2879c512ad247d65
-19	3014	7948801479191988	CMakeFiles/dune_core.dir/src/wind/vectorfield.cpp.obj	7bc7ba4ea3a2b897
-19	1116	7948801786104955	sand_dune.exe	2879c512ad247d65
+8693	11809	7949595523423758	sand_dune.exe	20d9b6b8bdae3b4b
+278	6997	7949595439265917	CMakeFiles/dune_core.dir/src/wind/vectorfield.cpp.obj	7c2b454a54e9f6a3
+20	712	7949598056000318	build.ninja	d7113e8ba9ffbe06
+20	712	7949598056000318	C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/cmake_install.cmake	d7113e8ba9ffbe06
+47	4456	7949598058479544	CMakeFiles/dune_core.dir/src/grains/piv.cpp.obj	f23ccf28c2015fa3
+4458	4646	7949598102602158	dune_core.lib	344165bab23487b8
+4646	6319	7949598104471998	sand_dune.exe	76d7cab791f8c85d
+4663	6640	7949598104651520	run_tests.exe	48a323da7e9cd715
+22	4148	7949600132583279	CMakeFiles/dune_core.dir/src/grains/piv.cpp.obj	f23ccf28c2015fa3
+4149	4308	7949600173744216	dune_core.lib	344165bab23487b8
+4308	5616	7949600175452676	sand_dune.exe	76d7cab791f8c85d
+4322	5960	7949600175586440	run_tests.exe	48a323da7e9cd715

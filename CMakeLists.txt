@@ -9,7 +9,7 @@ find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
 find_package(imgui REQUIRED)
 find_package(Eigen3 REQUIRED)
-
+find_package(FFTW3f REQUIRED)
 # Core library
 file(GLOB_RECURSE SOURCES src/**/*.cpp)
 list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cpp$")
@@ -18,6 +18,7 @@ add_library(dune_core ${SOURCES})
 target_include_directories(dune_core PUBLIC include)
 target_link_libraries(dune_core PUBLIC SDL3::SDL3)
 target_link_libraries(dune_core PUBLIC Eigen3::Eigen)
+target_link_libraries(dune_core PUBLIC FFTW3::fftw3f)
 
 # Main executable
 add_executable(sand_dune src/main.cpp)
