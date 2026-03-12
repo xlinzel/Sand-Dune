@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

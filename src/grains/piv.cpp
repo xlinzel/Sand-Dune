@@ -226,8 +226,8 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
         int mask_size = 5;
         int r0 = std::max(0, row - mask_size);
         int c0 = std::max(0, col - mask_size);
-        int r1 = std::min(ccmap.rows(), row + mask_size + 1);
-        int c1 = std::min(ccmap.cols(), col + mask_size + 1);
+        int r1 = std::min((int)ccmap.rows(), row + mask_size + 1);
+        int c1 = std::min((int)ccmap.cols(), col + mask_size + 1);
 
         ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
 
@@ -248,8 +248,8 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
         int mask_size = 5;
         int r0 = std::max(0, row - mask_size);
         int c0 = std::max(0, col - mask_size);
-        int r1 = std::min(ccmap.rows(), row + mask_size + 1);
-        int c1 = std::min(ccmap.cols(), col + mask_size + 1);
+        int r1 = std::min((int)ccmap.rows(), row + mask_size + 1);
+        int c1 = std::min((int)ccmap.cols(), col + mask_size + 1);
 
         ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
 
@@ -279,8 +279,8 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
     int mask_size = 5;
     int r0 = std::max(0, row - mask_size);
     int c0 = std::max(0, col - mask_size);
-    int r1 = std::min(ccmap.rows(), row + mask_size + 1);
-    int c1 = std::min(ccmap.cols(), col + mask_size + 1);
+    int r1 = std::min((int)ccmap.rows(), row + mask_size + 1);
+    int c1 = std::min((int)ccmap.cols(), col + mask_size + 1);
 
     ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
 

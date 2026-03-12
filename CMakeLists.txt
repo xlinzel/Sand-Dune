@@ -7,9 +7,43 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
-find_package(imgui REQUIRED)
+if(WIN32)
+    find_package(imgui REQUIRED)
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG        v1.91.8
+    )
+    FetchContent_MakeAvailable(imgui)
+    add_library(imgui_fetched STATIC
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+    )
+    target_include_directories(imgui_fetched PUBLIC
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends
+    )
+    target_link_libraries(imgui_fetched PUBLIC SDL3::SDL3)
+    add_library(imgui::imgui ALIAS imgui_fetched)
+endif()
 find_package(Eigen3 REQUIRED)
+if(NOT WIN32)
+    set(FFTW3f_DIR "/usr/lib/cmake/fftw3")
+endif()
 find_package(FFTW3f REQUIRED)
+if(NOT TARGET FFTW3::fftw3f)
+    add_library(FFTW3::fftw3f SHARED IMPORTED)
+    set_target_properties(FFTW3::fftw3f PROPERTIES
+        IMPORTED_LOCATION "/usr/lib/libfftw3f.so"
+        INTERFACE_INCLUDE_DIRECTORIES "/usr/include"
+    )
+endif()
 # Core library
 file(GLOB_RECURSE SOURCES src/**/*.cpp)
 list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cpp$")
