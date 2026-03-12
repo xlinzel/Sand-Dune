@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+
 project(sand_dune)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -7,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
+
 if(WIN32)
     find_package(imgui REQUIRED)
 else()
@@ -32,6 +34,7 @@ else()
     target_link_libraries(imgui_fetched PUBLIC SDL3::SDL3)
     add_library(imgui::imgui ALIAS imgui_fetched)
 endif()
+
 find_package(Eigen3 REQUIRED)
 if(NOT WIN32)
     set(FFTW3f_DIR "/usr/lib/cmake/fftw3")

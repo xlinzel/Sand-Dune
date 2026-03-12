@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"/home/cybernet/projects/work/background-oriented-schlieren/build/cmake_install.cmake"
+		"C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }

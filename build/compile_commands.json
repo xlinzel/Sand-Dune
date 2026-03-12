@@ -1,98 +1,62 @@
 [
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -g -std=c++23 -o CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui.cpp",
-  "output": "CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\piv.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\piv.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/grains/piv.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/grains/piv.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -g -std=c++23 -o CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui_draw.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui_draw.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui_draw.cpp",
-  "output": "CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui_draw.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\reconstruction.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\reconstruction.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/grains/reconstruction.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/grains/reconstruction.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -g -std=c++23 -o CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui_tables.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui_tables.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui_tables.cpp",
-  "output": "CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui_tables.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\grains\\validation.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\grains\\validation.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/grains/validation.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/grains/validation.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -g -std=c++23 -o CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui_widgets.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui_widgets.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/imgui_widgets.cpp",
-  "output": "CMakeFiles/imgui_fetched.dir/_deps/imgui-src/imgui_widgets.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\colormap.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\colormap.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/colormap.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/colormap.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -g -std=c++23 -o CMakeFiles/imgui_fetched.dir/_deps/imgui-src/backends/imgui_impl_sdl3.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends/imgui_impl_sdl3.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends/imgui_impl_sdl3.cpp",
-  "output": "CMakeFiles/imgui_fetched.dir/_deps/imgui-src/backends/imgui_impl_sdl3.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\image.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\image.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/image.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/image.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -g -std=c++23 -o CMakeFiles/imgui_fetched.dir/_deps/imgui-src/backends/imgui_impl_sdlrenderer3.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends/imgui_impl_sdlrenderer3.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends/imgui_impl_sdlrenderer3.cpp",
-  "output": "CMakeFiles/imgui_fetched.dir/_deps/imgui-src/backends/imgui_impl_sdlrenderer3.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\lib\\stb.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\lib\\stb.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/lib/stb.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/lib/stb.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/grains/piv.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/grains/piv.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/grains/piv.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/grains/piv.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\mask.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\mask.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/mask.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/mask.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/grains/reconstruction.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/grains/reconstruction.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/grains/reconstruction.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/grains/reconstruction.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\wind\\vectorfield.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\wind\\vectorfield.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/wind/vectorfield.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/wind/vectorfield.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/grains/validation.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/grains/validation.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/grains/validation.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/grains/validation.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\sand_dune.dir\\src\\main.cpp.obj /FdCMakeFiles\\sand_dune.dir\\ /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\main.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/main.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/sand_dune.dir/src/main.cpp.obj"
 },
 {
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/sun/colormap.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/sun/colormap.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/sun/colormap.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/sun/colormap.cpp.o"
-},
-{
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/sun/image.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/sun/image.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/sun/image.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/sun/image.cpp.o"
-},
-{
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/sun/lib/stb.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/sun/lib/stb.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/sun/lib/stb.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/sun/lib/stb.cpp.o"
-},
-{
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/sun/mask.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/sun/mask.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/sun/mask.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/sun/mask.cpp.o"
-},
-{
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/dune_core.dir/src/wind/vectorfield.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/wind/vectorfield.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/wind/vectorfield.cpp",
-  "output": "CMakeFiles/dune_core.dir/src/wind/vectorfield.cpp.o"
-},
-{
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++  -I/home/cybernet/projects/work/background-oriented-schlieren/include -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src -I/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-src/backends -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/sand_dune.dir/src/main.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/src/main.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/src/main.cpp",
-  "output": "CMakeFiles/sand_dune.dir/src/main.cpp.o"
-},
-{
-  "directory": "/home/cybernet/projects/work/background-oriented-schlieren/build",
-  "command": "/usr/bin/g++ -DPROJECT_DIR=\\\"/home/cybernet/projects/work/background-oriented-schlieren\\\" -I/home/cybernet/projects/work/background-oriented-schlieren/include -isystem /usr/include/eigen3 -g -std=c++23 -o CMakeFiles/run_tests.dir/tests/test.cpp.o -c /home/cybernet/projects/work/background-oriented-schlieren/tests/test.cpp",
-  "file": "/home/cybernet/projects/work/background-oriented-schlieren/tests/test.cpp",
-  "output": "CMakeFiles/run_tests.dir/tests/test.cpp.o"
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -DPROJECT_DIR=\"\\\"C:/Users/xlinzel/Desktop/BOS/Sand Dune\\\"\" -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\run_tests.dir\\tests\\test.cpp.obj /FdCMakeFiles\\run_tests.dir\\ /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\tests\\test.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/tests/test.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/run_tests.dir/tests/test.cpp.obj"
 }
 ]

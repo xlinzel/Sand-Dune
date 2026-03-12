@@ -1,6 +1,5 @@
-/home/cybernet/projects/work/background-oriented-schlieren/build/CMakeFiles/imgui_fetched.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/CMakeFiles/dune_core.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/CMakeFiles/sand_dune.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/CMakeFiles/run_tests.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/CMakeFiles/edit_cache.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/CMakeFiles/rebuild_cache.dir
+C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir
+C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/sand_dune.dir
+C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/run_tests.dir
+C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/edit_cache.dir
+C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/rebuild_cache.dir

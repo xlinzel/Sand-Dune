@@ -1,1 +1,0 @@
-/usr/bin/g++ -g -Wl,--dependency-file=CMakeFiles/sand_dune.dir/link.d CMakeFiles/sand_dune.dir/src/main.cpp.o -o sand_dune  libdune_core.a /usr/lib/libSDL3_image.so.0.4.0 libimgui_fetched.a /usr/lib/libfftw3f.so /usr/lib/libSDL3.so.0.4.2

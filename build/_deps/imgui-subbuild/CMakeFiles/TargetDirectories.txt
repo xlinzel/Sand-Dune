@@ -1,3 +1,0 @@
-/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-subbuild/CMakeFiles/imgui-populate.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-subbuild/CMakeFiles/edit_cache.dir
-/home/cybernet/projects/work/background-oriented-schlieren/build/_deps/imgui-subbuild/CMakeFiles/rebuild_cache.dir

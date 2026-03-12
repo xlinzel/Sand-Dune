@@ -1,1 +1,0 @@
-/usr/bin/g++ -g -Wl,--dependency-file=CMakeFiles/run_tests.dir/link.d CMakeFiles/run_tests.dir/tests/test.cpp.o -o run_tests  libdune_core.a /usr/lib/libSDL3.so.0.4.2 /usr/lib/libfftw3f.so
