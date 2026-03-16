@@ -17,9 +17,9 @@ std::string Image::Load(const char* filename)
         return std::string("Failed to return image data: ") + filename;
     }
     
-    
     data = std::vector<unsigned char>(raw, raw + width * height);
     stbi_image_free(raw);
+
     loaded = true;
 
     return std::string("");
@@ -28,6 +28,12 @@ std::string Image::Load(const char* filename)
 const std::vector<unsigned char>& Image::GetData() const
 {
     return data;
+}
+
+Eigen::MatrixXf Image::GetMat() const
+{
+    return Eigen::Map<Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+        (const_cast<unsigned char*>(data.data()), height, width).cast<float>() / 255.0f;
 }
 
 bool Image::GetLoaded() const

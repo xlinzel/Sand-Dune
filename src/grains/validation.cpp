@@ -16,12 +16,12 @@ const VectorField Validation::PostProcess(const VectorField& data) const
     int n;
 
     //Secondary pass: neighbourhood median residual thrshold
-    for(int i = 0; i < data.width; i++)
+    for(int i = 0; i < data.height; i++)
     {
-        for(int j = 0; j < data.height; j++)
+        for(int j = 0; j < data.width; j++)
         {
             //Copy the neighbourhood (surrounding pixels)
-            if(i > 0 && i < data.width - 1 && j > 0 && j < data.height - 1)
+            if(i > 0 && i < data.height - 1 && j > 0 && j < data.width - 1)
             {
                 u_neighbourhood[0] = data.u(i-1, j-1);
                 u_neighbourhood[1] = data.u(i,   j-1);
@@ -51,7 +51,7 @@ const VectorField Validation::PostProcess(const VectorField& data) const
                     {
                         if(di == 0 && dj == 0) continue;
                         int ni = i + di, nj = j + dj;
-                        if(ni < 0 || ni >= data.width || nj < 0 || nj >= data.height) continue;
+                        if(ni < 0 || ni >= data.height || nj < 0 || nj >= data.width) continue;
                         u_neighbourhood[n] = data.u(ni, nj);
                         v_neighbourhood[n] = data.v(ni, nj);
                         n++;
@@ -139,12 +139,12 @@ const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic> Validation::Validate(co
     int n;
 
     //Secondary pass: neighbourhood median residual thrshold
-    for(int i = 0; i < data.width; i++)
+    for(int i = 0; i < data.height; i++)
     {
-        for(int j = 0; j < data.height; j++)
+        for(int j = 0; j < data.width; j++)
         {
             //Copy the neighbourhood (surrounding pixels)
-            if(i > 0 && i < data.width - 1 && j > 0 && j < data.height - 1)
+            if(i > 0 && i < data.height - 1 && j > 0 && j < data.width - 1)
             {
                 u_neighbourhood[0] = data.u(i-1, j-1);
                 u_neighbourhood[1] = data.u(i,   j-1);
@@ -174,7 +174,7 @@ const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic> Validation::Validate(co
                     {
                         if(di == 0 && dj == 0) continue;
                         int ni = i + di, nj = j + dj;
-                        if(ni < 0 || ni >= data.width || nj < 0 || nj >= data.height) continue;
+                        if(ni < 0 || ni >= data.height || nj < 0 || nj >= data.width) continue;
                         u_neighbourhood[n] = data.u(ni, nj);
                         v_neighbourhood[n] = data.v(ni, nj);
                         n++;
@@ -257,12 +257,12 @@ const VectorField Validation::PostProcess(const VectorField& data, const Eigen::
     int n;
 
     //Secondary pass: neighbourhood median residual thrshold
-    for(int i = 0; i < data.width; i++)
+    for(int i = 0; i < data.height; i++)
     {
-        for(int j = 0; j < data.height; j++)
+        for(int j = 0; j < data.width; j++)
         {
             //Copy the neighbourhood (surrounding pixels)
-            if(i > 0 && i < data.width - 1 && j > 0 && j < data.height - 1)
+            if(i > 0 && i < data.height - 1 && j > 0 && j < data.width - 1)
             {
                 u_neighbourhood[0] = data.u(i-1, j-1);
                 u_neighbourhood[1] = data.u(i,   j-1);
@@ -292,7 +292,7 @@ const VectorField Validation::PostProcess(const VectorField& data, const Eigen::
                     {
                         if(di == 0 && dj == 0) continue;
                         int ni = i + di, nj = j + dj;
-                        if(ni < 0 || ni >= data.width || nj < 0 || nj >= data.height) continue;
+                        if(ni < 0 || ni >= data.height || nj < 0 || nj >= data.width) continue;
                         u_neighbourhood[n] = data.u(ni, nj);
                         v_neighbourhood[n] = data.v(ni, nj);
                         n++;

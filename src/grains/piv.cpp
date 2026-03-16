@@ -106,6 +106,17 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
                 std::max(0, win_col * movement - margin),
                 std::min(search_size - std::max(0, margin - win_row * movement), ref_size(0) - std::max(0, win_row * movement - margin)),
                 std::min(search_size - std::max(0, margin - win_col * movement), ref_size(1) - std::max(0, win_col * movement - margin)));
+            
+            //Check total "energy" of the reference window, if it is below 1%, assume there is essentially nothign there
+                //May need to test teh percent here.
+            float energy = w_reference.array().abs().sum();
+            if(energy < window_size * window_size * 0.01f)
+            {
+                vectorfield.u(win_row, win_col) = 0.0f;
+                vectorfield.v(win_row, win_col) = 0.0f;
+                vectorfield.s2n(win_row, win_col) = 0.0f;
+                continue;
+            }
 
             Eigen::MatrixXf ccmap = CrossCorrelationFFT(w_reference, w_flow);
 

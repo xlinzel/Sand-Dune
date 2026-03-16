@@ -3,6 +3,7 @@
 #include <vector>
 #include <iostream>
 #include <lib/stb_image.h>
+#include <Eigen/Dense>
 
 class Image 
 {
@@ -14,6 +15,7 @@ public:
     std::string Load(const char* filename);
 
     const std::vector<unsigned char>& GetData() const;
+    Eigen::MatrixXf GetMat() const;
 
     bool GetLoaded() const;
     int GetWidth() const;

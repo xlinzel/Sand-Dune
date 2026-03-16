@@ -5,7 +5,18 @@
 #include <grains/piv.h>
 #include <grains/validation.h>
 #include <iostream>
+#include <chrono>
 #include <vector>
+
+auto FormatTime = [](std::chrono::steady_clock::time_point start, 
+                     std::chrono::steady_clock::time_point end) -> std::string
+{
+    auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    auto min = total_ms / 60000;
+    auto sec = (total_ms % 60000) / 1000;
+    auto ms  = total_ms % 1000;
+    return std::to_string(min) + ":" + std::to_string(sec) + "." + std::to_string(ms);
+};
 
 TEST_CASE("Image Loading")
 {
@@ -96,7 +107,7 @@ TEST_CASE("PIV Computation")
     }
 }
 
-TEST_CASE("Post Processing")
+TEST_CASE("Validation and Post Processing")
 {
     SUBCASE("Validation - Known Outlier Detection")
     {
@@ -165,4 +176,54 @@ TEST_CASE("Post Processing")
         CHECK(processed.u(5, 5) == doctest::Approx(5.0f).epsilon(1.0f));
         CHECK(processed.v(5, 5) == doctest::Approx(0.0f).epsilon(1.0f));
     }
+}
+
+TEST_CASE("Full Pipeline Test")
+{
+    //-----------------------------------------------------------------------------
+    //IMG LOADING
+    //-----------------------------------------------------------------------------
+
+    //Start time for Image Loading
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
+    Image ref;
+    ref.Load((std::string(PROJECT_DIR) + "/images/ref.bmp").c_str());
+
+    Image flow;
+    flow.Load((std::string(PROJECT_DIR) + "/images/flow.bmp").c_str());
+
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+    std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";
+    
+    //-----------------------------------------------------------------------------
+    //PIV COMPUTATION
+    //-----------------------------------------------------------------------------
+
+    //Start time for PIV
+    begin = std::chrono::steady_clock::now();
+    
+    PIV piv;
+    VectorField result = piv.Compute(ref.GetMat(), flow.GetMat());
+    result.SaveCSV((std::string(PROJECT_DIR) + "/csv/result.csv").c_str());
+
+    end = std::chrono::steady_clock::now();
+
+    std::cout << "PIV Elapsed Time: " << FormatTime(begin, end) << "\n";
+
+    //-----------------------------------------------------------------------------
+    //POST PROCESSING
+    //-----------------------------------------------------------------------------
+
+    //Start time for post processing
+    begin = std::chrono::steady_clock::now();
+
+    Validation post;
+    VectorField processed = post.PostProcess(result);
+    processed.SaveCSV((std::string(PROJECT_DIR) + "/csv/processed.csv").c_str());
+
+    end = std::chrono::steady_clock::now();
+
+    std::cout << "Post Process Elapsed Time: " << FormatTime(begin, end) << "\n";
 }
