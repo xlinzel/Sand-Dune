@@ -19,7 +19,7 @@ void VectorField::SaveCSV(const std::string& path) const
         return;
 
     file << "rows,cols\n";
-    file << width << "," << height << "\n";
+    file << height << "," << width << "\n";
 
     file << "u,v,s2n\n";
 

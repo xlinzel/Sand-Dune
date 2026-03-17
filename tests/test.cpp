@@ -4,6 +4,7 @@
 #include <sun/mask.h>
 #include <grains/piv.h>
 #include <grains/validation.h>
+#include <grains/reconstruction.h>
 #include <iostream>
 #include <chrono>
 #include <vector>
@@ -226,4 +227,45 @@ TEST_CASE("Full Pipeline Test")
     end = std::chrono::steady_clock::now();
 
     std::cout << "Post Process Elapsed Time: " << FormatTime(begin, end) << "\n";
+
+    //-----------------------------------------------------------------------------
+    //RECONSTRUCTION
+    //-----------------------------------------------------------------------------
+    
+    //Start time for reconstruction
+    begin = std::chrono::steady_clock::now();
+
+    Reconstruction recon;
+    Eigen::MatrixXf surface = recon.Compute(processed);
+    
+    //Save
+    //-----------------------------------------------------------------------------
+
+    std::ofstream file;
+    file.open((std::string(PROJECT_DIR) + "/csv/surface.csv").c_str());
+
+    if(!file.is_open())
+        return;
+
+    file << "rows,cols\n";
+    file << surface.rows() << "," << surface.cols() << "\n";
+
+    file << "val\n";
+
+    //Collumn major format
+    for(int j = 0; j < surface.cols(); j++)
+    {
+        for(int i = 0; i < surface.rows(); i++)
+        {
+            file << surface(i, j) << "\n";
+        }
+    }
+
+    //-----------------------------------------------------------------------------
+
+    end = std::chrono::steady_clock::now();
+
+    std::cout << "Reconstruction Elapsed Time: " << FormatTime(begin, end) << "\n";
+
+
 }

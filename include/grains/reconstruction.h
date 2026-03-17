@@ -2,6 +2,7 @@
 
 #include <wind/vectorfield.h>
 #include <limits>
+#include <fftw3.h>
 
 //https://cpb.iphy.ac.cn/article/2017/1892/cpb_26_6_064701.html
 
@@ -17,18 +18,14 @@
 class Reconstruction
 {
 public:
-    Reconstruction();
+    Reconstruction() {};
 
     //Full pipeline
     Eigen::MatrixXf Compute(const VectorField& data) const;
-    Eigen::MatrixXf Compute(const VectorField& data, const Eigen::Vector2f center , const float radius) const;
+    //Eigen::MatrixXf Compute(const VectorField& data, const Eigen::Vector2f center , const float radius) const;
 
 private:
     //Sub steps???
-
-    //Apply Hanning window, circular if specified???
-    Eigen::MatrixXf Hanning(const VectorField& data) const;
-    Eigen::MatrixXf Hanning(const VectorField& data, const Eigen::Vector2f center , const float radius) const;
 
     float eps = std::numeric_limits<float>::min();
 };

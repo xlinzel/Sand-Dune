@@ -1,24 +1,101 @@
 #include <grains/reconstruction.h>
+#include <numbers>
 
 Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
 {
+    //Preprocessing
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> dx(data.height * 2, data.width * 2);
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> dy(data.height * 2, data.width * 2);
+
+    dx.block(0, 0, data.height, data.width) = data.u;
+    dy.block(0, 0, data.height, data.width) = data.v;
+
+    dx.block(data.height, 0, data.height, data.width) = data.u.colwise().reverse().eval();
+    dy.block(data.height, 0, data.height, data.width) = -data.v.colwise().reverse().eval();
+
+    dx.block(0, data.width, data.height, data.width) = -data.u.rowwise().reverse().eval();
+    dy.block(0, data.width, data.height, data.width) = data.v.rowwise().reverse().eval();
+
+    dx.block(data.height, data.width, data.height, data.width) = -data.u.reverse().eval();
+    dy.block(data.height, data.width, data.height, data.width) = -data.v.reverse().eval();
+
+    //FFT Setup and execution
+    int rows = 2 * data.height;
+    int cols = 2 * data.width;
+    int freq_cols = floor(cols / 2) + 1;
+
+    float* xin = (float*) fftwf_alloc_real(rows * cols);
+    float* yin = (float*) fftwf_alloc_real(rows * cols);
+
+    fftwf_complex* xout = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
+    fftwf_complex* yout = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
+
+    fftwf_plan xplan  = fftwf_plan_dft_r2c_2d(rows, cols, xin,  xout,  FFTW_MEASURE);
+    fftwf_plan yplan  = fftwf_plan_dft_r2c_2d(rows, cols, yin,  yout,  FFTW_MEASURE);
+
+    memcpy(xin, dx.data(), sizeof(float) * rows * cols);
+    memcpy(yin, dy.data(), sizeof(float) * rows * cols);
+
+    fftwf_execute(xplan);
+    fftwf_execute(yplan);
+
+    //Frankot Chellappa Method
+    fftwf_complex* F_s = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
+
+    for(int m = 0; m < rows; m++)
+    {
+        for(int n = 0; n < freq_cols; n++)
+        {
+            float fx = (float) n / cols;
+            float fy = (m <= rows / 2) ? (float) m / rows : (float)(m - rows) / rows;
+
+            float demonimator = 2.0f * std::numbers::pi * (fx * fx + fy * fy) + eps;
+
+            //Real part
+            F_s[m * freq_cols + n][0] = (fx * xout[m * freq_cols + n][1] + fy * yout[m * freq_cols + n][1])
+                                    / demonimator;
+
+            //Imaginary part
+            F_s[m * freq_cols + n][1] = - (fx * xout[m * freq_cols + n][0] + fy * yout[m * freq_cols + n][0])
+                                    / demonimator;
+        }
+    }
+
+    //FFT Inverse
+    float* s = (float*) fftwf_malloc(sizeof(float) * rows * cols);
+
+    fftwf_plan inv_plan = fftwf_plan_dft_c2r_2d(rows, cols, F_s, s, FFTW_MEASURE);
+    fftwf_execute(inv_plan);
+
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> fft_surf(data.height * 2, data.width * 2);
+    memcpy(fft_surf.data(), s, sizeof(float) * rows * cols);
+
+    fft_surf /= rows * cols;
+
+    Eigen::MatrixXf surface(data.height, data.width);
+    surface = fft_surf.block(0, 0, data.height, data.width);
+
+    //FFT cleanup
+    fftwf_free(xin);
+    fftwf_free(yin);
+    fftwf_free(xout);
+    fftwf_free(yout);
+
+    fftwf_destroy_plan(xplan);
+    fftwf_destroy_plan(yplan);
+
+    fftwf_free(F_s);
+    fftwf_free(s);
     
+    fftwf_destroy_plan(inv_plan);
+
+    return surface;
 }
 
-Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Eigen::Vector2f center , const float radius) const
+/*Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Eigen::Vector2f center , const float radius) const
 {
-    
-}
+    //Preprocessing
 
-Eigen::MatrixXf Reconstruction::Hanning(const VectorField& data) const
-{
-    /*for(int i = 0; i < rows; i++)
-        hannr(i) = 0.5f * (1.0f - cos((2.0f * i * std::numbers::pi) / (rows - 1)));
-    for(int j = 0; j < cols; j++)
-        hannc(j) = 0.5f * (1.0f - cos((2.0f * j * std::numbers::pi) / (cols - 1)));*/
-}
-
-Eigen::MatrixXf Reconstruction::Hanning(const VectorField& data, const Eigen::Vector2f center , const float radius) const
-{
+    //TODO: Ciruclar Hann???
     
-}
+}*/
