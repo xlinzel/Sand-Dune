@@ -2,10 +2,10 @@
 
 Mask::Mask(const int w, const int h, const Eigen::Vector2f center , const float radius)
 {
-    GenerateCircleMask(w, h, center, radius);
+    GenBinCircleMask(w, h, center, radius);
 }
 
-void Mask::GenerateCircleMask(const int w, const int h, const Eigen::Vector2f center , const float radius)
+void Mask::GenBinCircleMask(const int w, const int h, const Eigen::Vector2f center , const float radius)
 {
     width = w;
     height = h;
@@ -26,6 +26,42 @@ void Mask::GenerateCircleMask(const int w, const int h, const Eigen::Vector2f ce
     set = true;
 }
 
+void Mask::GenTukCircleMask(const int w, const int h, const Eigen::Vector2f center, const float radius, const float a)
+{
+    //Tukey masking
+    //a = region of tapering for edge
+    width = w;
+    height = h;
+
+    mask = Eigen::MatrixXf::Zero(h, w); //Rows then columns hence the order
+
+    for(int row = 0; row < h; row++)
+    {
+        for(int col = 0; col < w; col++)
+        {
+            float dx = float(col) - center(0);
+            float dy = float(row) - center(1);
+
+            float r = std::sqrt(dx * dx + dy * dy);
+
+            if(r <= (1 - a) * radius)
+            {
+                mask(row, col) = 1.0f;
+            }
+            else if( (1 - a) * radius < r && r <= radius)
+            {
+                mask(row, col) = 0.5 * (1 + cos(std::numbers::pi * (r - (1 - a) * radius) / (a * radius)));
+            }
+            else //(dx * dx + dy * dy) > radius
+            {
+                mask(row, col) = 0.0f;
+            }
+        }
+    }
+
+    set = true;
+}
+
 Eigen::MatrixXf Mask::ApplyMask(const Eigen::MatrixXf& data)
 {
     if(mask.cols() != data.cols() || mask.rows() != data.rows())
@@ -33,17 +69,7 @@ Eigen::MatrixXf Mask::ApplyMask(const Eigen::MatrixXf& data)
         return Eigen::MatrixXf(); //Return empty matrix on size mismatch
     }
 
-    Eigen::MatrixXf return_data(mask.rows(), data.cols());
-
-    for(int row = 0; row < mask.rows(); row++)
-    {
-        for(int col = 0; col < data.cols(); col++)
-        {
-            return_data(row, col) = mask(row, col) == 1.0f ? data(row, col) : 0.0f;
-        }
-    }
-
-    return return_data;
+    return data.array() * mask.array();
 }
 
 const Eigen::MatrixXf& Mask::GetMask() const

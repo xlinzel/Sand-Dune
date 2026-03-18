@@ -45,7 +45,7 @@ TEST_CASE("Mask Generation")
 
     //Initializaiton and then load
     Mask mask;
-    mask.GenerateCircleMask(100, 100, Eigen::Vector2f(40, 40), 30.0f);
+    mask.GenBinCircleMask(100, 100, Eigen::Vector2f(40, 40), 30.0f);
     Eigen::MatrixXf result = mask.ApplyMask(data);
 
     CHECK(result(40, 40) == 1.0f);
@@ -205,7 +205,7 @@ TEST_CASE("Full Pipeline Test")
     //Start time for PIV
     begin = std::chrono::steady_clock::now();
     
-    PIV piv;
+    PIV piv(24, 16, 32);
     VectorField result = piv.Compute(ref.GetMat(), flow.GetMat());
     result.SaveCSV((std::string(PROJECT_DIR) + "/csv/result.csv").c_str());
 
@@ -235,8 +235,20 @@ TEST_CASE("Full Pipeline Test")
     //Start time for reconstruction
     begin = std::chrono::steady_clock::now();
 
+    //Mask mask;
+    //mask.GenTukCircleMask(processed.width, processed.height, Eigen::Vector2f(processed.width / 2, processed.height / 2), processed.height / 2, 0.0f);
+    //processed.u = mask.ApplyMask(processed.u);
+    //processed.v = mask.ApplyMask(processed.v);
+
     Reconstruction recon;
-    Eigen::MatrixXf surface = recon.Compute(processed);
+    Parameters parameters;
+    parameters.Z_d = 200.0f;
+    parameters.Z_a = 100.0f;
+    parameters.f = 30.0f;
+    Eigen::MatrixXf surface = recon.Compute(processed, parameters);
+
+    //mask.GenBinCircleMask(processed.width, processed.height, Eigen::Vector2f(processed.width / 2, processed.height / 2), processed.height / 2);
+    //surface = mask.ApplyMask(surface);
     
     //Save
     //-----------------------------------------------------------------------------

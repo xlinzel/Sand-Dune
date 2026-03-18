@@ -1,23 +1,36 @@
 #include <grains/reconstruction.h>
 #include <numbers>
 
-Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
+Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Parameters& parameters) const
 {
+    //Mean Subtraction (account for tilt) ------------------------------------------------------------
+    //Could remove real gradient data from large refractive index migration in material
+    auto nonzero_u = (data.u.array() != 0.0f);
+    float mean_u = nonzero_u.select(data.u.array(), 0.0f).sum() / nonzero_u.count();
+
+    auto nonzero_v = (data.v.array() != 0.0f);
+    float mean_v = nonzero_v.select(data.v.array(), 0.0f).sum() / nonzero_v.count();
+
+    Eigen::MatrixXf u_cent = nonzero_u.select(data.u.array() - mean_u, 0.0f);
+    Eigen::MatrixXf v_cent = nonzero_v.select(data.v.array() - mean_v, 0.0f);
+
+    //-----------------------------------------------
+
     //Preprocessing
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> dx(data.height * 2, data.width * 2);
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> dy(data.height * 2, data.width * 2);
 
-    dx.block(0, 0, data.height, data.width) = data.u;
-    dy.block(0, 0, data.height, data.width) = data.v;
+    dx.block(0, 0, data.height, data.width) = u_cent;
+    dy.block(0, 0, data.height, data.width) = v_cent;
 
-    dx.block(data.height, 0, data.height, data.width) = data.u.colwise().reverse().eval();
-    dy.block(data.height, 0, data.height, data.width) = -data.v.colwise().reverse().eval();
+    dx.block(data.height, 0, data.height, data.width) = u_cent.colwise().reverse().eval();
+    dy.block(data.height, 0, data.height, data.width) = -v_cent.colwise().reverse().eval();
 
-    dx.block(0, data.width, data.height, data.width) = -data.u.rowwise().reverse().eval();
-    dy.block(0, data.width, data.height, data.width) = data.v.rowwise().reverse().eval();
+    dx.block(0, data.width, data.height, data.width) = -u_cent.rowwise().reverse().eval();
+    dy.block(0, data.width, data.height, data.width) = v_cent.rowwise().reverse().eval();
 
-    dx.block(data.height, data.width, data.height, data.width) = -data.u.reverse().eval();
-    dy.block(data.height, data.width, data.height, data.width) = -data.v.reverse().eval();
+    dx.block(data.height, data.width, data.height, data.width) = -u_cent.reverse().eval();
+    dy.block(data.height, data.width, data.height, data.width) = -v_cent.reverse().eval();
 
     //FFT Setup and execution
     int rows = 2 * data.height;
@@ -42,6 +55,11 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     //Frankot Chellappa Method
     fftwf_complex* F_s = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
 
+    //FFT Inverse Setup
+    float* s = (float*) fftwf_malloc(sizeof(float) * rows * cols);
+
+    fftwf_plan inv_plan = fftwf_plan_dft_c2r_2d(rows, cols, F_s, s, FFTW_MEASURE);
+
     for(int m = 0; m < rows; m++)
     {
         for(int n = 0; n < freq_cols; n++)
@@ -61,10 +79,6 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
         }
     }
 
-    //FFT Inverse
-    float* s = (float*) fftwf_malloc(sizeof(float) * rows * cols);
-
-    fftwf_plan inv_plan = fftwf_plan_dft_c2r_2d(rows, cols, F_s, s, FFTW_MEASURE);
     fftwf_execute(inv_plan);
 
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> fft_surf(data.height * 2, data.width * 2);
@@ -74,6 +88,12 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
 
     Eigen::MatrixXf surface(data.height, data.width);
     surface = fft_surf.block(0, 0, data.height, data.width);
+
+    //---------------------------------------------------------------------------------------
+    //Only apply integral to points that were non zero to begin with
+    auto valid = (data.u.array() != 0.0f || data.v.array() != 0.0f);
+    surface = valid.select(surface.array(), 0.0f);
+    //---------------------------------------------------------------------------------------
 
     //FFT cleanup
     fftwf_free(xin);
@@ -89,13 +109,9 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     
     fftwf_destroy_plan(inv_plan);
 
+    //Post integration conversion S -> relative refractive index
+    surface.array() *= parameters.P_px * 0.001 * (parameters.Z_d + parameters.Z_a - parameters.f)
+                        / (parameters.f * parameters.Z_d * parameters.t);
+
     return surface;
 }
-
-/*Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Eigen::Vector2f center , const float radius) const
-{
-    //Preprocessing
-
-    //TODO: Ciruclar Hann???
-    
-}*/
