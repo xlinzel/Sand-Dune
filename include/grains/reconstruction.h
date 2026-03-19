@@ -1,7 +1,7 @@
 #pragma once
 
 #include <wind/vectorfield.h>
-#include <wind/parameters.h>
+#include <wind/opticalparameters.h>
 #include <limits>
 #include <fftw3.h>
 
@@ -22,7 +22,7 @@ public:
     Reconstruction() {};
 
     //Full pipeline
-    Eigen::MatrixXf Compute(const VectorField& data, const Parameters& parameters) const;
+    Eigen::MatrixXf Compute(const VectorField& data, const OpticalParameters& parameters) const;
 
 private:
     float eps = std::numeric_limits<float>::min();

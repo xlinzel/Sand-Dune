@@ -1,7 +1,7 @@
 #include <grains/reconstruction.h>
 #include <numbers>
 
-Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Parameters& parameters) const
+Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const OpticalParameters& parameters) const
 {
     //Mean Subtraction (account for tilt) ------------------------------------------------------------
     //Could remove real gradient data from large refractive index migration in material
@@ -67,15 +67,15 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Parameter
             float fx = (float) n / cols;
             float fy = (m <= rows / 2) ? (float) m / rows : (float)(m - rows) / rows;
 
-            float demonimator = 2.0f * std::numbers::pi * (fx * fx + fy * fy) + eps;
+            float denominator = 2.0f * std::numbers::pi * (fx * fx + fy * fy) + eps;
 
             //Real part
             F_s[m * freq_cols + n][0] = (fx * xout[m * freq_cols + n][1] + fy * yout[m * freq_cols + n][1])
-                                    / demonimator;
+                                    / denominator;
 
             //Imaginary part
             F_s[m * freq_cols + n][1] = - (fx * xout[m * freq_cols + n][0] + fy * yout[m * freq_cols + n][0])
-                                    / demonimator;
+                                    / denominator;
         }
     }
 
@@ -110,8 +110,12 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Parameter
     fftwf_destroy_plan(inv_plan);
 
     //Post integration conversion S -> relative refractive index
-    surface.array() *= parameters.P_px * 0.001 * (parameters.Z_d + parameters.Z_a - parameters.f)
-                        / (parameters.f * parameters.Z_d * parameters.t);
+    float Z_B = parameters.Z_d + parameters.Z_a;
+    float z_i = parameters.f * Z_B / (Z_B - parameters.f);
+    float p_mm = parameters.P_px * 1e-3f;  // µm → mm
+
+    surface.array() *= p_mm * parameters.Z_a * (Z_B - parameters.f)
+                    / (parameters.f * parameters.Z_d * parameters.t * z_i);
 
     return surface;
 }

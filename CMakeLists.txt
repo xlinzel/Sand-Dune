@@ -48,7 +48,7 @@ if(NOT TARGET FFTW3::fftw3f)
     )
 endif()
 # Core library
-file(GLOB_RECURSE SOURCES src/**/*.cpp)
+file(GLOB_RECURSE SOURCES src/*.cpp)
 list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 
 add_library(dune_core ${SOURCES})

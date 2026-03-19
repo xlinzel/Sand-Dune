@@ -116,7 +116,6 @@ const VectorField Validation::PostProcess(const VectorField& data) const
                 processed.u(i, j) = u_med;
                 processed.v(i, j) = v_med;
             }
-
         }
     }
 
@@ -236,7 +235,7 @@ const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic> Validation::Validate(co
 
             if(std::sqrt(u_nrm * u_nrm + v_nrm * v_nrm) > nrm_threshold)
             {
-                valid(i, j) = 0.0;
+                valid(i, j) = false;
             }
 
         }
@@ -318,6 +317,41 @@ const VectorField Validation::PostProcess(const VectorField& data, const Eigen::
 
             //If the outlier is already flagged, reassign
             if(!mask(i, j))
+            {
+                processed.u(i, j) = u_med;
+                processed.v(i, j) = v_med;
+                continue;
+            }
+
+            //Residuals calculations
+            for(int k = 0; k < n; k++)
+            {
+                u_neighbourhood_res[k] = std::abs(u_neighbourhood[k] - u_med);
+                v_neighbourhood_res[k] = std::abs(v_neighbourhood[k] - v_med);
+            }
+
+            std::sort(u_neighbourhood_res.begin(), u_neighbourhood_res.begin() + n);
+            std::sort(v_neighbourhood_res.begin(), v_neighbourhood_res.begin() + n);
+            
+            float u_res_med, v_res_med;
+
+            if(n % 2 != 0)
+            {
+                u_res_med = u_neighbourhood_res[n / 2];
+                v_res_med = v_neighbourhood_res[n / 2];
+            }
+            else
+            {
+                u_res_med = (u_neighbourhood_res[(n - 1) / 2] + u_neighbourhood_res[n / 2]) / 2.0;
+                v_res_med = (v_neighbourhood_res[(n - 1) / 2] + v_neighbourhood_res[n / 2]) / 2.0;
+            }
+
+            float u_nrm, v_nrm;
+
+            u_nrm = std::abs((data.u(i, j) - u_med) / (u_res_med + eps));
+            v_nrm = std::abs((data.v(i, j) - v_med) / (v_res_med + eps));
+
+            if(std::sqrt(u_nrm * u_nrm + v_nrm * v_nrm) > nrm_threshold)
             {
                 processed.u(i, j) = u_med;
                 processed.v(i, j) = v_med;

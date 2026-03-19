@@ -5,6 +5,7 @@
 #include <grains/piv.h>
 #include <grains/validation.h>
 #include <grains/reconstruction.h>
+#include <session.h>
 #include <iostream>
 #include <chrono>
 #include <vector>
@@ -180,104 +181,76 @@ TEST_CASE("Validation and Post Processing")
 }
 
 TEST_CASE("Full Pipeline Test")
-{
-    //-----------------------------------------------------------------------------
-    //IMG LOADING
-    //-----------------------------------------------------------------------------
+  {
+      Session session;
 
-    //Start time for Image Loading
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+      // Parameters
+      session.pivparameters.window_size = 64;
+      session.pivparameters.overlap = 54;
+      session.pivparameters.search_size = 72;
 
-    Image ref;
-    ref.Load((std::string(PROJECT_DIR) + "/images/ref.bmp").c_str());
+      session.opticalparameters.Z_d = 300.0f;
+      session.opticalparameters.Z_a = 100.0f;
+      session.opticalparameters.f = 30.0f;
 
-    Image flow;
-    flow.Load((std::string(PROJECT_DIR) + "/images/flow.bmp").c_str());
+      //-----------------------------------------------------------------------------
+      // IMAGE LOADING
+      //-----------------------------------------------------------------------------
+      std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+      session.LoadRef(std::string(PROJECT_DIR) + "/images/ref.bmp");
+      session.LoadFlow(std::string(PROJECT_DIR) + "/images/flow.bmp");
 
-    std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";
-    
-    //-----------------------------------------------------------------------------
-    //PIV COMPUTATION
-    //-----------------------------------------------------------------------------
+      std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+      std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";
 
-    //Start time for PIV
-    begin = std::chrono::steady_clock::now();
-    
-    PIV piv(24, 16, 32);
-    VectorField result = piv.Compute(ref.GetMat(), flow.GetMat());
-    result.SaveCSV((std::string(PROJECT_DIR) + "/csv/result.csv").c_str());
+      CHECK(session.GetStageState(STAGE_PIV) == Ready);
 
-    end = std::chrono::steady_clock::now();
+      //-----------------------------------------------------------------------------
+      // PIV
+      //-----------------------------------------------------------------------------
+      begin = std::chrono::steady_clock::now();
+      session.RunPIV();
+      end = std::chrono::steady_clock::now();
+      std::cout << "PIV Elapsed Time: " << FormatTime(begin, end) << "\n";
 
-    std::cout << "PIV Elapsed Time: " << FormatTime(begin, end) << "\n";
+      CHECK(session.GetStageState(STAGE_PIV) == Done);
+      session.GetRawField().SaveCSV(std::string(PROJECT_DIR) + "/csv/result.csv");
 
-    //-----------------------------------------------------------------------------
-    //POST PROCESSING
-    //-----------------------------------------------------------------------------
+      //-----------------------------------------------------------------------------
+      // VALIDATION
+      //-----------------------------------------------------------------------------
+      begin = std::chrono::steady_clock::now();
+      session.RunValidation();
+      end = std::chrono::steady_clock::now();
+      std::cout << "Post Process Elapsed Time: " << FormatTime(begin, end) << "\n";
 
-    //Start time for post processing
-    begin = std::chrono::steady_clock::now();
+      CHECK(session.GetStageState(STAGE_VAL) == Done);
+      session.GetProcessedField().SaveCSV(std::string(PROJECT_DIR) + "/csv/processed.csv");
 
-    Validation post;
-    VectorField processed = post.PostProcess(result);
-    processed.SaveCSV((std::string(PROJECT_DIR) + "/csv/processed.csv").c_str());
+      //-----------------------------------------------------------------------------
+      // RECONSTRUCTION
+      //-----------------------------------------------------------------------------
+      begin = std::chrono::steady_clock::now();
+      session.RunReconstruction();
+      end = std::chrono::steady_clock::now();
+      std::cout << "Reconstruction Elapsed Time: " << FormatTime(begin, end) << "\n";
 
-    end = std::chrono::steady_clock::now();
+      CHECK(session.GetStageState(STAGE_RECON) == Done);
 
-    std::cout << "Post Process Elapsed Time: " << FormatTime(begin, end) << "\n";
+      const Eigen::MatrixXf& surface = session.GetSurface();
 
-    //-----------------------------------------------------------------------------
-    //RECONSTRUCTION
-    //-----------------------------------------------------------------------------
-    
-    //Start time for reconstruction
-    begin = std::chrono::steady_clock::now();
+      std::ofstream file;
+      file.open((std::string(PROJECT_DIR) + "/csv/surface.csv").c_str());
 
-    //Mask mask;
-    //mask.GenTukCircleMask(processed.width, processed.height, Eigen::Vector2f(processed.width / 2, processed.height / 2), processed.height / 2, 0.0f);
-    //processed.u = mask.ApplyMask(processed.u);
-    //processed.v = mask.ApplyMask(processed.v);
+      if(!file.is_open())
+          return;
 
-    Reconstruction recon;
-    Parameters parameters;
-    parameters.Z_d = 200.0f;
-    parameters.Z_a = 100.0f;
-    parameters.f = 30.0f;
-    Eigen::MatrixXf surface = recon.Compute(processed, parameters);
+      file << "rows,cols\n";
+      file << surface.rows() << "," << surface.cols() << "\n";
+      file << "val\n";
 
-    //mask.GenBinCircleMask(processed.width, processed.height, Eigen::Vector2f(processed.width / 2, processed.height / 2), processed.height / 2);
-    //surface = mask.ApplyMask(surface);
-    
-    //Save
-    //-----------------------------------------------------------------------------
-
-    std::ofstream file;
-    file.open((std::string(PROJECT_DIR) + "/csv/surface.csv").c_str());
-
-    if(!file.is_open())
-        return;
-
-    file << "rows,cols\n";
-    file << surface.rows() << "," << surface.cols() << "\n";
-
-    file << "val\n";
-
-    //Collumn major format
-    for(int j = 0; j < surface.cols(); j++)
-    {
-        for(int i = 0; i < surface.rows(); i++)
-        {
-            file << surface(i, j) << "\n";
-        }
-    }
-
-    //-----------------------------------------------------------------------------
-
-    end = std::chrono::steady_clock::now();
-
-    std::cout << "Reconstruction Elapsed Time: " << FormatTime(begin, end) << "\n";
-
-
-}
+      for(int j = 0; j < surface.cols(); j++)
+          for(int i = 0; i < surface.rows(); i++)
+              file << surface(i, j) << "\n";
+  }

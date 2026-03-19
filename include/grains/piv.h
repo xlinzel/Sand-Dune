@@ -4,6 +4,7 @@
 #include <wind/vectorfield.h>
 #include <iostream>
 #include <fftw3.h>
+#include <wind/pivparameters.h>
 
 class PIV
 {
@@ -19,6 +20,7 @@ public:
 
     PIV();
     PIV(const int window_size, const int overlap, const int search_size);
+    PIV(const PIVParameters parameters);
     ~PIV();
 
     VectorField Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow);

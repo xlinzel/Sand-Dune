@@ -19,6 +19,12 @@
 },
 {
   "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
+  "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\session.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\session.cpp\"",
+  "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/session.cpp",
+  "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/session.cpp.obj"
+},
+{
+  "directory": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build",
   "command": "C:\\PROGRA~1\\MICROS~1\\18\\Insiders\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx86\\x86\\cl.exe  /nologo /TP -I\"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\include\" -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include -external:IC:\\Users\\xlinzel\\vcpkg\\installed\\x86-windows\\include\\eigen3 -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++latest -MDd /FoCMakeFiles\\dune_core.dir\\src\\sun\\colormap.cpp.obj /FdCMakeFiles\\dune_core.dir\\dune_core.pdb /FS -c \"C:\\Users\\xlinzel\\Desktop\\BOS\\Sand Dune\\src\\sun\\colormap.cpp\"",
   "file": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/src/sun/colormap.cpp",
   "output": "C:/Users/xlinzel/Desktop/BOS/Sand Dune/build/CMakeFiles/dune_core.dir/src/sun/colormap.cpp.obj"

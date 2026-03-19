@@ -15,6 +15,12 @@ PIV::PIV(const int window_size, const int overlap, const int search_size)
     AllocateFFTBuffers();
 }
 
+PIV::PIV(const PIVParameters parameters)
+    : window_size(parameters.window_size), overlap(parameters.overlap), search_size(parameters.search_size)
+{
+    AllocateFFTBuffers();
+}
+
 PIV::~PIV()
 {
     FreeFFTBuffers();
@@ -246,7 +252,7 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
 
         float sig2noise = peak / second_peak;
         
-        return PeakResult{float(col - ccmap.cols()/2), float( - row - ccmap.rows()/2), sig2noise};
+        return PeakResult{float(col - ccmap.cols()/2), float(row - ccmap.rows()/2), sig2noise};
     }
     else if (ccmap(row, col-1) <= 0 || ccmap(row, col+1) <= 0 || ccmap(row-1, col) <= 0 || ccmap(row+1, col) <= 0)
     {
