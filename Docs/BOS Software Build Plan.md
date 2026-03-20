@@ -49,3 +49,10 @@ The goal of this phase is a fully interactive tool.
 15. Progress indicator during PIV (will be slow on 4K images)
 16. Multithreading — run pipeline on a background thread so GUI doesn't freeze
 17. Config save/load so parameters don't need to be re-entered every run
+
+
+## TODO:
+- add the other plots in the same manner
+- move pixel calculations to session??? Maybe not needed
+- Add setup calculations (same as html) to window in application
+- Save graph feature???

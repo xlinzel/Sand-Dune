@@ -11,6 +11,7 @@ find_package(SDL3_image REQUIRED)
 
 if(WIN32)
     find_package(imgui REQUIRED)
+    find_package(implot REQUIRED)
 else()
     include(FetchContent)
     FetchContent_Declare(
@@ -64,6 +65,7 @@ target_link_libraries(sand_dune PRIVATE
     SDL3::SDL3
     SDL3_image::SDL3_image
     imgui::imgui
+    implot::implot
 )
 
 # Tests
@@ -72,5 +74,9 @@ add_executable(run_tests ${TEST_SOURCES})
 target_link_libraries(run_tests PRIVATE dune_core)
 
 target_compile_definitions(run_tests PRIVATE 
+    PROJECT_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_compile_definitions(dune_core PRIVATE 
     PROJECT_DIR="${CMAKE_SOURCE_DIR}"
 )

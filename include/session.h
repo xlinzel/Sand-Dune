@@ -1,5 +1,7 @@
 #pragma once
 
+#include <future>
+
 #include <sun/image.h>
 #include <sun/mask.h>
 #include <wind/vectorfield.h>
@@ -13,6 +15,7 @@ enum StageState
 {
     Idle,
     Ready,
+    Busy,
     Done,
     Dirty
 };
@@ -36,18 +39,29 @@ public:
     void RunPIV();
     void RunValidation();
     void RunReconstruction();
+    
+    bool IsRunning() const;
+    void RunPIVAsync();
+    void RunValidationAsync();
+    void RunReconstructionAsync();
+
+    //TODO: apply mask function
 
     const Image& GetRef() const;
     const Image& GetFlow() const;
+    
+    const std::string& GetRefPath() const;
+    const std::string& GetFlowPath() const;
+
     const VectorField& GetRawField() const;
     const VectorField& GetProcessedField() const;
     const Eigen::MatrixXf& GetSurface() const;
     StageState GetStageState(Stages s) const;
-
     //Mask open variables
     int posx = 0, posy = 0;
     int radius = 1000;
     float a = 0.1f;
+    bool mask_apply = true;
 
     PIVParameters pivparameters;
     OpticalParameters opticalparameters;
@@ -60,4 +74,7 @@ private:
     Eigen::MatrixXf surface;
 
     StageState stagestates[STAGE_TOTAL];
+
+    //Async
+    std::future<void> activetask;
 };

@@ -6804,3 +6804,121 @@ events:
         - "C:/Program Files (x86)/sand_dune"
       CMAKE_FIND_ROOT_PATH: "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug;C:/Users/xlinzel/vcpkg/installed/x86-windows"
 ...
+
+---
+events:
+  -
+    kind: "find_package-v1"
+    backtrace:
+      - "C:/Users/xlinzel/vcpkg/scripts/buildsystems/vcpkg.cmake:908 (_find_package)"
+      - "CMakeLists.txt:14 (find_package)"
+    name: "implot"
+    configs:
+      -
+        filename: "implotConfig.cmake"
+        kind: "cmake"
+      -
+        filename: "implot-config.cmake"
+        kind: "cmake"
+    version_request:
+      exact: false
+    settings:
+      required: "required_explicit"
+      quiet: false
+      global: false
+      policy_scope: true
+      bypass_provider: false
+      names:
+        - "implot"
+      path_suffixes:
+        - ""
+      paths:
+        CMAKE_FIND_USE_CMAKE_PATH: true
+        CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+        CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+        CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+        CMAKE_FIND_USE_INSTALL_PREFIX: true
+        CMAKE_FIND_USE_PACKAGE_ROOT_PATH: true
+        CMAKE_FIND_USE_CMAKE_PACKAGE_REGISTRY: true
+        CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY: true
+        CMAKE_FIND_ROOT_PATH_MODE: "BOTH"
+    candidates:
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug/implotConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug/implot-config.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug/implotConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug/implot-config.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/implotConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/implot-config.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/share/implot/implotConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+    found:
+      path: "C:/Users/xlinzel/vcpkg/installed/x86-windows/share/implot/implot-config.cmake"
+      mode: "config"
+      version: ""
+    search_context:
+      CMAKE_PREFIX_PATH:
+        - "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug"
+        - "C:/Users/xlinzel/vcpkg/installed/x86-windows"
+      ENV{PATH}:
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX86\\x86"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\VC\\VCPackages"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\CommonExtensions\\Microsoft\\TestWindow"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\CommonExtensions\\Microsoft\\TeamFoundation\\Team Explorer"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\MSBuild\\Current\\bin\\Roslyn"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Team Tools\\DiagnosticsHub\\Collector"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\Extensions\\Microsoft\\CodeCoverage.Console"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\\\x86"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\\\x86"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\\\MSBuild\\Current\\Bin\\amd64"
+        - "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\Tools\\"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\Programs\\Microsoft VS Code"
+        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\windows\\system32"
+        - "C:\\windows"
+        - "C:\\windows\\System32\\Wbem"
+        - "C:\\windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\MATLAB\\MATLAB Runtime\\R2025b\\runtime\\win64"
+        - "C:\\Program Files\\MATLAB\\MATLAB Runtime\\v901\\runtime\\win64"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\Programs\\Git\\cmd"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\Python\\bin"
+        - "C:\\Users\\xlinzel\\AppData\\Local\\Programs\\Python\\Python310\\Scripts"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\Ninja"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\Common7\\IDE\\VC\\Linux\\bin\\ConnectionManagerExe"
+        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\VC\\vcpkg"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/sand_dune"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake"
+        - "C:/Program Files (x86)/sand_dune"
+      CMAKE_FIND_ROOT_PATH: "C:/Users/xlinzel/vcpkg/installed/x86-windows/debug;C:/Users/xlinzel/vcpkg/installed/x86-windows"
+...

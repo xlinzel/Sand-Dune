@@ -283,6 +283,9 @@ _VCPKG_INSTALLED_DIR:PATH=C:/Users/xlinzel/vcpkg/installed
 //The directory containing a CMake configuration file for imgui.
 imgui_DIR:PATH=C:/Users/xlinzel/vcpkg/installed/x86-windows/share/imgui
 
+//The directory containing a CMake configuration file for implot.
+implot_DIR:PATH=C:/Users/xlinzel/vcpkg/installed/x86-windows/share/implot
+
 //Value Computed by CMake
 sand_dune_BINARY_DIR:STATIC=C:/Users/xlinzel/Desktop/BOS/Sand Dune/build
 

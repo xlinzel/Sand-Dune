@@ -1,0 +1,50 @@
+#pragma once
+
+#include <session.h>
+#include <SDL3/SDL.h>
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
+#include <imgui_impl_sdlrenderer3.h>
+#include <implot.h>
+#include <iostream>
+
+class UI
+{
+public:
+    UI(Session& session, SDL_Renderer* renderer);
+
+    void SetRenderer(SDL_Renderer* renderer);
+    
+    void Draw();
+    void DrawLoadPanel();
+    void DrawParametersPanel();
+    void DrawPipelinePanel();
+    void DrawCalcualtionsPanel();
+    void DrawVisualizationPanel();
+
+    void DrawPIV();
+
+    void DrawSettingsPanel();
+
+    void DrawRefPanel();
+    void DrawFlowPanel();
+
+    static void OnRefSelected(void* userdata, const char* const* filelist, int filter);
+    static void OnFlowSelected(void* userdata, const char* const* filelist, int filter);
+
+private:
+    Session& session;
+    SDL_Renderer* renderer = nullptr;
+
+    SDL_Texture* ref_tex = nullptr;
+    SDL_Texture* flow_tex = nullptr;
+    SDL_Texture* surface_tex = nullptr;
+
+    std::string pending_ref_path;
+    std::string pending_flow_path;
+    bool file_dialog_open = false;
+
+    //Background image rendering
+    SDL_Surface* surf = nullptr;
+    SDL_Texture* texture_bg = nullptr;
+};
