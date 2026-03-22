@@ -53,45 +53,26 @@ void App::Init()
     //Set nicer font
     io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 20.0f);
 
-    ImGui::StyleColorsDark();
-
+    // Shape/spacing (theme-independent)
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowBorderSize = 0.0f;
-    style.WindowRounding = 10.0f;
-    style.WindowPadding = ImVec2(10, 10);
-
-    style.FrameRounding    = 4.0f;  // buttons, sliders, inputs
-    style.GrabRounding     = 4.0f;  // slider grab
+    style.WindowPadding     = ImVec2(12, 12);
+    style.FramePadding      = ImVec2(8, 4);
+    style.ItemSpacing       = ImVec2(8, 6);
+    style.ItemInnerSpacing  = ImVec2(6, 4);
+    style.ScrollbarSize     = 10.0f;
+    style.GrabMinSize       = 10.0f;
+    style.WindowRounding    = 8.0f;
+    style.ChildRounding     = 6.0f;
+    style.FrameRounding     = 4.0f;
+    style.GrabRounding      = 4.0f;
+    style.PopupRounding     = 6.0f;
     style.ScrollbarRounding = 4.0f;
-
-    //Remover header colours
-    //ImVec4 title_color = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
-    //style.Colors[ImGuiCol_TitleBg]       = title_color;
-    //style.Colors[ImGuiCol_TitleBgActive] = title_color;
-
-    //Change from default colors
-    ImVec4 gray       = ImVec4(0.40f, 0.40f, 0.40f, 1.0f);
-    ImVec4 gray_hover = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
-    ImVec4 gray_act   = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
-
-    style.Colors[ImGuiCol_Button]        = gray;
-    style.Colors[ImGuiCol_ButtonHovered] = gray_hover;
-    style.Colors[ImGuiCol_ButtonActive]  = gray_act;
-
-    style.Colors[ImGuiCol_SliderGrab]        = gray;
-    style.Colors[ImGuiCol_SliderGrabActive]  = gray_act;
-
-    style.Colors[ImGuiCol_FrameBg]         = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
-    style.Colors[ImGuiCol_FrameBgHovered]  = ImVec4(0.28f, 0.28f, 0.28f, 1.0f);
-    style.Colors[ImGuiCol_FrameBgActive]   = ImVec4(0.30f, 0.30f, 0.30f, 1.0f);
-
-    style.Colors[ImGuiCol_CheckMark]       = gray_act;
-    style.Colors[ImGuiCol_Header]          = gray;
-    style.Colors[ImGuiCol_HeaderHovered]   = gray_hover;
-    style.Colors[ImGuiCol_HeaderActive]    = gray_act;
-    
-    style.Colors[ImGuiCol_TitleBg] = style.Colors[ImGuiCol_TitleBgActive];
+    style.TabRounding       = 4.0f;
+    style.WindowBorderSize  = 1.0f;
+    style.FrameBorderSize   = 0.0f;
     style.ScaleAllSizes(mainscale);
+
+    UI::ApplyDarkTheme();
 
     //----------------------
 

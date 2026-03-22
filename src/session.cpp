@@ -17,8 +17,8 @@ void Session::LoadRef(const std::string& path)
         stagestates[STAGE_PIV] = Ready;
     }
     
-    posx = GetFlow().GetWidth() / 2;
-    posy = GetFlow().GetHeight() / 2;
+    posx = GetRef().GetWidth() / 2;
+    posy = GetRef().GetHeight() / 2;
 }
 
 void Session::LoadFlow(const std::string& path)
@@ -88,11 +88,21 @@ void Session::RunPIVAsync()
         return;
 
     stagestates[STAGE_PIV] = Busy;
+    if(stagestates[STAGE_VAL]   == Done) stagestates[STAGE_VAL]   = Dirty;
+    if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
 
     activetask = std::async(std::launch::async, [this]()
     {
+        if(mask_apply)
+            mask.GenBinCircleMask(ref.GetWidth(), ref.GetHeight(), {posx, posy}, radius);
+
         PIV piv(pivparameters);
-        rawfield = piv.Compute(ref.GetMat(), flow.GetMat());
+        
+        if(mask_apply)
+            rawfield = piv.Compute(mask.ApplyMask(ref.GetMat()), mask.ApplyMask(flow.GetMat()));
+        else
+            rawfield = piv.Compute(ref.GetMat(), flow.GetMat());
+
         stagestates[STAGE_PIV] = Done;
         stagestates[STAGE_VAL] = Ready;
     });
@@ -106,6 +116,7 @@ void Session::RunValidationAsync()
         return;
 
     stagestates[STAGE_VAL] = Busy;
+    if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
 
     activetask = std::async(std::launch::async, [this]()
     {

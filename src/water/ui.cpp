@@ -3,6 +3,7 @@
 UI::UI(Session& session, SDL_Renderer* renderer)
     : session(session), renderer(renderer)
 {
+    piv_textures.resize(3);
 }
 
 void UI::SetRenderer(SDL_Renderer* renderer)
@@ -155,7 +156,7 @@ void UI::DrawParametersPanel()
     ImGui::PushItemWidth(-100.0f);
 
     ImGui::SliderInt("Window Size", &session.pivparameters.window_size, 0, 164);
-    ImGui::SliderInt("Overlap", &session.pivparameters.overlap, 0, 32);
+    ImGui::SliderInt("Overlap", &session.pivparameters.overlap, 0, session.pivparameters.window_size - 2);
     ImGui::SliderInt("Search Size", &session.pivparameters.search_size, 0, 196);
 
     ImGui::PopItemWidth();
@@ -210,7 +211,7 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    bool was_disabled = session.GetStageState(STAGE_PIV) != Ready || session.IsRunning();
+    bool was_disabled = (session.GetStageState(STAGE_PIV) != Ready && session.GetStageState(STAGE_PIV) != Done && session.GetStageState(STAGE_PIV) != Dirty) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
@@ -243,7 +244,7 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    was_disabled = session.GetStageState(STAGE_VAL) != Ready || session.IsRunning();
+    was_disabled = (session.GetStageState(STAGE_VAL) != Ready && session.GetStageState(STAGE_VAL) != Done && (session.GetStageState(STAGE_VAL) != Dirty || session.GetStageState(STAGE_PIV) != Done)) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
@@ -276,7 +277,7 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    was_disabled = session.GetStageState(STAGE_RECON) != Ready || session.IsRunning();
+    was_disabled = (session.GetStageState(STAGE_RECON) != Ready && session.GetStageState(STAGE_RECON) != Done && (session.GetStageState(STAGE_RECON) != Dirty || session.GetStageState(STAGE_VAL) != Done)) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
@@ -294,102 +295,551 @@ void UI::DrawPipelinePanel()
 void UI::DrawVisualizationPanel()
 {
     if(session.GetStageState(STAGE_PIV) == Done)
-    {
         DrawPIV();
+
+    if(session.GetStageState(STAGE_VAL) == Done)
+        DrawVal();
+
+    if(session.GetStageState(STAGE_RECON) == Done)
+        DrawSurf();
+}
+
+void UI::RebuildPIVTextures()
+{
+    const VectorField& field = session.GetRawField();
+    const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
+    int w = field.width, h = field.height;
+
+    // Build RGBA pixel buffer (temporary — SDL copies it)
+    std::vector<uint8_t> pixels(w * h * 4);
+
+    ImPlot::PushColormap(ImPlotColormap_Viridis);
+    for(int i = 0; i < 3; i++)
+    {
+        float range = piv_cmap_max[i] - piv_cmap_min[i];
+
+        for(int r = 0; r < h; r++)
+        {
+            for(int c = 0; c < w; c++)
+            {
+                float t = (range != 0.0f) ? ((*data[i])(r, c) - piv_cmap_min[i]) / range : 0.0f;
+                t = std::clamp(t, 0.0f, 1.0f);
+                ImVec4 col = ImPlot::SampleColormap(t);
+                int idx = (r * w + c) * 4;
+                pixels[idx+0] = (uint8_t)(col.x * 255);
+                pixels[idx+1] = (uint8_t)(col.y * 255);
+                pixels[idx+2] = (uint8_t)(col.z * 255);
+                pixels[idx+3] = 255;
+            }
+        }
+
+        // Upload to GPU — nearest-neighbor scaling for hard pixel boundaries
+        if(piv_textures[i]) SDL_DestroyTexture(piv_textures[i]);
+        piv_textures[i] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_STATIC, w, h);
+        SDL_SetTextureScaleMode(piv_textures[i], SDL_SCALEMODE_NEAREST);
+        SDL_UpdateTexture(piv_textures[i], nullptr, pixels.data(), w * 4);
     }
+    ImPlot::PopColormap();
 }
 
 void UI::DrawPIV()
 {
     ImGui::Begin("PIV Results");
 
-        static float cmap_min = -2.0f;
-        static float cmap_max =  2.0f;
+    const VectorField& field = session.GetRawField();
 
-        float controls_h = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y;
-        float scale_w    = 65.0f;
-        float avail_w    = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
-        float avail_h    = ImGui::GetContentRegionAvail().y - controls_h;
-        float ratio      = (float)session.GetRawField().height / (float)session.GetRawField().width;
+    // --- Invalidate textures when PIV reruns ---
+    static StageState last_piv_state = Idle;
+    StageState cur_piv_state = session.GetStageState(STAGE_PIV);
+    if(cur_piv_state == Done && last_piv_state != Done)
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+    last_piv_state = cur_piv_state;
 
-        // Fit to available space while preserving aspect ratio
-        float plot_h = std::min(avail_h, avail_w * ratio);
-        float plot_w = plot_h / ratio;
+    // --- Rebuild textures if invalidated or colormap range changed ---
+    static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
+    bool dirty = (piv_textures[0] == nullptr);
+    for(int i = 0; i < 3; i++)
+        dirty |= (piv_cmap_min[i] != last_min[i] || piv_cmap_max[i] != last_max[i]);
+    if(dirty)
+    {
+        RebuildPIVTextures();
+        for(int i = 0; i < 3; i++) { last_min[i] = piv_cmap_min[i]; last_max[i] = piv_cmap_max[i]; }
+    }
 
-        //--------------------------------------------------
-        // Main PIV Plot
-        //--------------------------------------------------
+    // --- Physical scale: PIV cell spacing -> mm ---
+    float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
+                     / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
+    float px_to_mm = (session.pivparameters.window_size - session.pivparameters.overlap)
+                     * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
+    float field_w_mm = field.width  * px_to_mm;
+    float field_h_mm = field.height * px_to_mm;
 
-        //TODO: Move somewhere else
-        float Z_i = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
-                    / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
+    // --- Layout ---
+    float scale_w   = 65.0f;
+    float controls_h = ImGui::GetFrameHeightWithSpacing() * 2 + ImGui::GetStyle().ItemSpacing.y;
+    float avail_w   = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
+    float avail_h   = ImGui::GetContentRegionAvail().y - controls_h;
+    float ratio     = (float)field.height / (float)field.width;
+    float plot_h    = std::min(avail_h, avail_w * ratio);
+    float plot_w    = plot_h / ratio;
 
-        float px_to_um = (session.pivparameters.window_size - session.pivparameters.overlap) 
-                            * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i;
+    // --- Map selection (mutually exclusive, no rebuild) ---
+    ImGui::RadioButton("u",   &piv_map, 0); ImGui::SameLine();
+    ImGui::RadioButton("v",   &piv_map, 1); ImGui::SameLine();
+    ImGui::RadioButton("s2n", &piv_map, 2);
 
-        float px_to_mm = px_to_um / 1000;
+    // --- Heatmap plot ---
+    if(ImPlot::BeginPlot("##pivresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
+    {
+        ImPlot::SetupAxes("x (mm)", "y (mm)");
+        ImPlot::SetupAxesLimits(0, field_w_mm, 0, field_h_mm, ImGuiCond_Once);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, field_w_mm);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, field_h_mm);
 
-        if(ImPlot::BeginPlot("##pivmain", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
+        if(ImPlot::IsPlotHovered())
         {
-            ImPlot::SetupAxes("x (mm)", "y (mm)", 0, 0);
-            ImPlot::SetupAxesLimits(0, session.GetRawField().width * px_to_mm, 0, session.GetRawField().height * px_to_mm, ImGuiCond_Once);
-            ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, session.GetRawField().width * px_to_mm);
-            ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, session.GetRawField().height * px_to_mm);
-            
-            if(ImPlot::IsPlotHovered())
-            {
-                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                float real_x = mouse.x * px_to_mm;
-                float real_y = mouse.y * px_to_mm;
-                ImGui::SetTooltip("%.2f mm, %.2f mm", real_x, real_y);
-            }
-
-            ImPlot::PushColormap(ImPlotColormap_Viridis);
-            ImPlot::PlotHeatmap(
-                "u",
-                session.GetRawField().u.data(),
-                session.GetRawField().height,
-                session.GetRawField().width,
-                cmap_min, cmap_max,
-                nullptr,
-                ImPlotPoint(0, 0),
-                ImPlotPoint(session.GetRawField().width * px_to_mm, session.GetRawField().height * px_to_mm),
-                {ImPlotHeatmapFlags_ColMajor}
-            );
-
-            ImPlot::PopColormap();
-
-            ImPlot::EndPlot();
+            ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+            int col = (int)(mouse.x / px_to_mm);
+            int row = (int)(mouse.y / px_to_mm);
+            const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+            if(col >= 0 && col < field.width && row >= 0 && row < field.height)
+                ImGui::SetTooltip("%.4f", (*maps[piv_map])(row, col));
         }
 
-        ImGui::SameLine();
-        ImPlot::PushColormap(ImPlotColormap_Viridis);
-        ImPlot::ColormapScale("##scale", cmap_min, cmap_max, ImVec2(scale_w, plot_h));
-        ImPlot::PopColormap();
+        ImPlot::PlotImage("##heatmap", (ImTextureID)piv_textures[piv_map],
+                          ImPlotPoint(0, 0), ImPlotPoint(field_w_mm, field_h_mm));
+        ImPlot::EndPlot();
+    }
 
-        //--------------------------------------------------
-        // Colormap range controls
-        //--------------------------------------------------
-        float half_w = (plot_w - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-        ImGui::SetNextItemWidth(half_w);
-        ImGui::SliderFloat("Min##cmap", &cmap_min, -10.0f, 0.0f);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(half_w);
-        ImGui::SliderFloat("Max##cmap", &cmap_max, 0.0f, 10.0f);
+    // --- Colormap scale bar ---
+    ImGui::SameLine();
+    ImPlot::PushColormap(ImPlotColormap_Viridis);
+    ImPlot::ColormapScale("##scale", piv_cmap_min[piv_map], piv_cmap_max[piv_map], ImVec2(scale_w, plot_h));
+    ImPlot::PopColormap();
 
-        ImGui::End();
+    // --- Range controls: Min | Max | Auto (per-map) ---
+    float auto_btn_w = ImGui::CalcTextSize("Auto").x + ImGui::GetStyle().FramePadding.x * 2;
+    float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
+
+    ImGui::SetNextItemWidth(half_w);
+    ImGui::SliderFloat("Min##cmap", &piv_cmap_min[piv_map], -10.0f, piv_cmap_max[piv_map]);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(half_w);
+    ImGui::SliderFloat("Max##cmap", &piv_cmap_max[piv_map], piv_cmap_min[piv_map], 10.0f);
+    ImGui::SameLine();
+    if(ImGui::Button("Auto##cmap"))
+    {
+        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+        piv_cmap_min[piv_map] = maps[piv_map]->minCoeff();
+        piv_cmap_max[piv_map] = maps[piv_map]->maxCoeff();
+    }
+
+    ImGui::End();
+}
+
+void UI::RebuildValTextures()
+{
+    const VectorField& field = session.GetProcessedField();
+    const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
+    int w = field.width, h = field.height;
+
+    // Build RGBA pixel buffer (temporary — SDL copies it)
+    std::vector<uint8_t> pixels(w * h * 4);
+
+    ImPlot::PushColormap(ImPlotColormap_Viridis);
+    for(int i = 0; i < 3; i++)
+    {
+        float range = val_cmap_max[i] - val_cmap_min[i];
+
+        for(int r = 0; r < h; r++)
+        {
+            for(int c = 0; c < w; c++)
+            {
+                float t = (range != 0.0f) ? ((*data[i])(r, c) - val_cmap_min[i]) / range : 0.0f;
+                t = std::clamp(t, 0.0f, 1.0f);
+                ImVec4 col = ImPlot::SampleColormap(t);
+                int idx = (r * w + c) * 4;
+                pixels[idx+0] = (uint8_t)(col.x * 255);
+                pixels[idx+1] = (uint8_t)(col.y * 255);
+                pixels[idx+2] = (uint8_t)(col.z * 255);
+                pixels[idx+3] = 255;
+            }
+        }
+
+        // Upload to GPU — nearest-neighbor scaling for hard pixel boundaries
+        if(val_textures[i]) SDL_DestroyTexture(val_textures[i]);
+        val_textures[i] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_STATIC, w, h);
+        SDL_SetTextureScaleMode(val_textures[i], SDL_SCALEMODE_NEAREST);
+        SDL_UpdateTexture(val_textures[i], nullptr, pixels.data(), w * 4);
+    }
+    ImPlot::PopColormap();
+}
+
+void UI::DrawVal()
+{
+    ImGui::Begin("Val Results");
+
+    const VectorField& field = session.GetProcessedField();
+
+    // --- Invalidate textures when Validation reruns ---
+    static StageState last_val_state = Idle;
+    StageState cur_val_state = session.GetStageState(STAGE_VAL);
+    if(cur_val_state == Done && last_val_state != Done)
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+    last_val_state = cur_val_state;
+
+    // --- Rebuild textures if invalidated or colormap range changed ---
+    static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
+    bool dirty = (val_textures[0] == nullptr);
+    for(int i = 0; i < 3; i++)
+        dirty |= (val_cmap_min[i] != last_min[i] || val_cmap_max[i] != last_max[i]);
+    if(dirty)
+    {
+        RebuildValTextures();
+        for(int i = 0; i < 3; i++) { last_min[i] = val_cmap_min[i]; last_max[i] = val_cmap_max[i]; }
+    }
+
+    // --- Physical scale: Val cell spacing -> mm ---
+    float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
+                     / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
+    float px_to_mm = (session.pivparameters.window_size - session.pivparameters.overlap)
+                     * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
+    float field_w_mm = field.width  * px_to_mm;
+    float field_h_mm = field.height * px_to_mm;
+
+    // --- Layout ---
+    float scale_w   = 65.0f;
+    float controls_h = ImGui::GetFrameHeightWithSpacing() * 2 + ImGui::GetStyle().ItemSpacing.y;
+    float avail_w   = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
+    float avail_h   = ImGui::GetContentRegionAvail().y - controls_h;
+    float ratio     = (float)field.height / (float)field.width;
+    float plot_h    = std::min(avail_h, avail_w * ratio);
+    float plot_w    = plot_h / ratio;
+
+    // --- Map selection (mutually exclusive, no rebuild) ---
+    ImGui::RadioButton("u",   &val_map, 0); ImGui::SameLine();
+    ImGui::RadioButton("v",   &val_map, 1); ImGui::SameLine();
+    ImGui::RadioButton("s2n", &val_map, 2);
+
+    // --- Heatmap plot ---
+    if(ImPlot::BeginPlot("##valresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
+    {
+        ImPlot::SetupAxes("x (mm)", "y (mm)");
+        ImPlot::SetupAxesLimits(0, field_w_mm, 0, field_h_mm, ImGuiCond_Once);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, field_w_mm);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, field_h_mm);
+
+        if(ImPlot::IsPlotHovered())
+        {
+            ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+            int col = (int)(mouse.x / px_to_mm);
+            int row = (int)(mouse.y / px_to_mm);
+            const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+            if(col >= 0 && col < field.width && row >= 0 && row < field.height)
+                ImGui::SetTooltip("%.4f", (*maps[val_map])(row, col));
+        }
+
+        ImPlot::PlotImage("##heatmap", (ImTextureID)val_textures[val_map],
+                          ImPlotPoint(0, 0), ImPlotPoint(field_w_mm, field_h_mm));
+        ImPlot::EndPlot();
+    }
+
+    // --- Colormap scale bar ---
+    ImGui::SameLine();
+    ImPlot::PushColormap(ImPlotColormap_Viridis);
+    ImPlot::ColormapScale("##scale", val_cmap_min[val_map], val_cmap_max[val_map], ImVec2(scale_w, plot_h));
+    ImPlot::PopColormap();
+
+    // --- Range controls: Min | Max | Auto (per-map) ---
+    float auto_btn_w = ImGui::CalcTextSize("Auto").x + ImGui::GetStyle().FramePadding.x * 2;
+    float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
+
+    ImGui::SetNextItemWidth(half_w);
+    ImGui::SliderFloat("Min##cmap", &val_cmap_min[val_map], -10.0f, val_cmap_max[val_map]);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(half_w);
+    ImGui::SliderFloat("Max##cmap", &val_cmap_max[val_map], val_cmap_min[val_map], 10.0f);
+    ImGui::SameLine();
+    if(ImGui::Button("Auto##cmap"))
+    {
+        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+        val_cmap_min[val_map] = maps[val_map]->minCoeff();
+        val_cmap_max[val_map] = maps[val_map]->maxCoeff();
+    }
+
+    ImGui::End();
+}
+
+void UI::RebuildSurfTexture()
+{
+    const Eigen::MatrixXf& surface = session.GetSurface();
+    int w = (int)surface.cols();
+    int h = (int)surface.rows();
+
+    float range = surf_cmap_max - surf_cmap_min;
+
+    std::vector<uint8_t> pixels(w * h * 4);
+
+    ImPlot::PushColormap(ImPlotColormap_Viridis);
+    for(int r = 0; r < h; r++)
+    {
+        for(int c = 0; c < w; c++)
+        {
+            float t = (range != 0.0f) ? (surface(r, c) - surf_cmap_min) / range : 0.0f;
+            t = std::clamp(t, 0.0f, 1.0f);
+            ImVec4 col = ImPlot::SampleColormap(t);
+            int idx = (r * w + c) * 4;
+            pixels[idx+0] = (uint8_t)(col.x * 255);
+            pixels[idx+1] = (uint8_t)(col.y * 255);
+            pixels[idx+2] = (uint8_t)(col.z * 255);
+            pixels[idx+3] = 255;
+        }
+    }
+    ImPlot::PopColormap();
+
+    if(surf_texture) SDL_DestroyTexture(surf_texture);
+    surf_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                     SDL_TEXTUREACCESS_STATIC, w, h);
+    SDL_SetTextureScaleMode(surf_texture, SDL_SCALEMODE_NEAREST);
+    SDL_UpdateTexture(surf_texture, nullptr, pixels.data(), w * 4);
+}
+
+void UI::DrawSurf()
+{
+    ImGui::Begin("Surface");
+
+    const Eigen::MatrixXf& surface = session.GetSurface();
+
+    // --- Invalidate texture when reconstruction reruns ---
+    static StageState last_recon_state = Idle;
+    StageState cur_recon_state = session.GetStageState(STAGE_RECON);
+    if(cur_recon_state == Done && last_recon_state != Done)
+    { SDL_DestroyTexture(surf_texture); surf_texture = nullptr; }
+    last_recon_state = cur_recon_state;
+
+    // --- Rebuild if invalidated or colormap range changed ---
+    static float last_min = 0, last_max = 0;
+    if(surf_texture == nullptr)
+    {
+        surf_cmap_min = surface.minCoeff();
+        surf_cmap_max = surface.maxCoeff();
+    }
+    if(surf_texture == nullptr || surf_cmap_min != last_min || surf_cmap_max != last_max)
+    {
+        RebuildSurfTexture();
+        last_min = surf_cmap_min; last_max = surf_cmap_max;
+    }
+
+    // --- Physical scale: same PIV cell spacing -> mm ---
+    float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
+                     / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
+    float px_to_mm = (session.pivparameters.window_size - session.pivparameters.overlap)
+                     * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
+    float field_w_mm = surface.cols() * px_to_mm;
+    float field_h_mm = surface.rows() * px_to_mm;
+
+    // --- Layout ---
+    float scale_w    = 65.0f;
+    float controls_h = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    float avail_w    = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
+    float avail_h    = ImGui::GetContentRegionAvail().y - controls_h;
+    float ratio      = (float)surface.rows() / (float)surface.cols();
+    float plot_h     = std::min(avail_h, avail_w * ratio);
+    float plot_w     = plot_h / ratio;
+
+    // --- Surface plot ---
+    if(ImPlot::BeginPlot("##surfplot", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
+    {
+        ImPlot::SetupAxes("x (mm)", "y (mm)");
+        ImPlot::SetupAxesLimits(0, field_w_mm, 0, field_h_mm, ImGuiCond_Once);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, field_w_mm);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, field_h_mm);
+
+        if(ImPlot::IsPlotHovered())
+        {
+            ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+            int col = (int)(mouse.x / px_to_mm);
+            int row = (int)(mouse.y / px_to_mm);
+            if(col >= 0 && col < surface.cols() && row >= 0 && row < surface.rows())
+                ImGui::SetTooltip("%.6f dn", surface(row, col));
+        }
+
+        ImPlot::PlotImage("##surfimage", (ImTextureID)surf_texture,
+                          ImPlotPoint(0, 0), ImPlotPoint(field_w_mm, field_h_mm));
+        ImPlot::EndPlot();
+    }
+
+    // --- Colormap scale bar ---
+    ImGui::SameLine();
+    ImPlot::PushColormap(ImPlotColormap_Viridis);
+    ImPlot::ColormapScale("##surfscale", surf_cmap_min, surf_cmap_max, ImVec2(scale_w, plot_h));
+    ImPlot::PopColormap();
+
+    // --- Range controls: Min | Max | Auto ---
+    float auto_btn_w = ImGui::CalcTextSize("Auto").x + ImGui::GetStyle().FramePadding.x * 2;
+    float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
+
+    ImGui::SetNextItemWidth(half_w);
+    ImGui::SliderFloat("Min##surfcmap", &surf_cmap_min, -1.0f, 1.0f);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(half_w);
+    ImGui::SliderFloat("Max##surfcmap", &surf_cmap_max, -1.0f, 1.0f);
+    ImGui::SameLine();
+    if(ImGui::Button("Auto##surfcmap"))
+    {
+        surf_cmap_min = surface.minCoeff();
+        surf_cmap_max = surface.maxCoeff();
+    }
+
+    ImGui::End();
+}
+
+void UI::ApplyDarkTheme()
+{
+    ImGui::StyleColorsDark();
+
+    ImVec4 bg0     = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+    ImVec4 bg1     = ImVec4(0.12f, 0.12f, 0.16f, 1.00f);
+    ImVec4 bg2     = ImVec4(0.18f, 0.18f, 0.24f, 1.00f);
+    ImVec4 bg3     = ImVec4(0.24f, 0.24f, 0.32f, 1.00f);
+    ImVec4 bg4     = ImVec4(0.28f, 0.28f, 0.38f, 1.00f);
+    ImVec4 accent  = ImVec4(0.28f, 0.60f, 0.90f, 1.00f);
+    ImVec4 acc_hov = ImVec4(0.38f, 0.70f, 1.00f, 1.00f);
+    ImVec4 acc_act = ImVec4(0.20f, 0.50f, 0.80f, 1.00f);
+    ImVec4 text    = ImVec4(0.88f, 0.88f, 0.92f, 1.00f);
+    ImVec4 text_d  = ImVec4(0.50f, 0.50f, 0.56f, 1.00f);
+    ImVec4 sep     = ImVec4(0.22f, 0.22f, 0.30f, 1.00f);
+
+    ImVec4* c = ImGui::GetStyle().Colors;
+    c[ImGuiCol_Text]                  = text;
+    c[ImGuiCol_TextDisabled]          = text_d;
+    c[ImGuiCol_WindowBg]              = bg1;
+    c[ImGuiCol_ChildBg]               = bg0;
+    c[ImGuiCol_PopupBg]               = bg1;
+    c[ImGuiCol_Border]                = sep;
+    c[ImGuiCol_BorderShadow]          = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_FrameBg]               = bg2;
+    c[ImGuiCol_FrameBgHovered]        = bg3;
+    c[ImGuiCol_FrameBgActive]         = bg4;
+    c[ImGuiCol_TitleBg]               = bg0;
+    c[ImGuiCol_TitleBgActive]         = bg0;
+    c[ImGuiCol_TitleBgCollapsed]      = bg0;
+    c[ImGuiCol_MenuBarBg]             = bg0;
+    c[ImGuiCol_ScrollbarBg]           = bg0;
+    c[ImGuiCol_ScrollbarGrab]         = bg3;
+    c[ImGuiCol_ScrollbarGrabHovered]  = bg4;
+    c[ImGuiCol_ScrollbarGrabActive]   = accent;
+    c[ImGuiCol_CheckMark]             = accent;
+    c[ImGuiCol_SliderGrab]            = accent;
+    c[ImGuiCol_SliderGrabActive]      = acc_act;
+    c[ImGuiCol_Button]                = bg3;
+    c[ImGuiCol_ButtonHovered]         = bg4;
+    c[ImGuiCol_ButtonActive]          = accent;
+    c[ImGuiCol_Header]                = bg3;
+    c[ImGuiCol_HeaderHovered]         = bg4;
+    c[ImGuiCol_HeaderActive]          = accent;
+    c[ImGuiCol_Separator]             = sep;
+    c[ImGuiCol_SeparatorHovered]      = acc_hov;
+    c[ImGuiCol_SeparatorActive]       = accent;
+    c[ImGuiCol_ResizeGrip]            = bg3;
+    c[ImGuiCol_ResizeGripHovered]     = acc_hov;
+    c[ImGuiCol_ResizeGripActive]      = accent;
+    c[ImGuiCol_Tab]                   = bg2;
+    c[ImGuiCol_TabHovered]            = acc_hov;
+    c[ImGuiCol_TabSelected]           = accent;
+    c[ImGuiCol_TabDimmed]             = bg1;
+    c[ImGuiCol_TabDimmedSelected]     = bg3;
+    c[ImGuiCol_DockingPreview]        = ImVec4(accent.x, accent.y, accent.z, 0.50f);
+    c[ImGuiCol_DockingEmptyBg]        = bg0;
+    c[ImGuiCol_PlotLines]             = accent;
+    c[ImGuiCol_PlotLinesHovered]      = acc_hov;
+    c[ImGuiCol_PlotHistogram]         = accent;
+    c[ImGuiCol_PlotHistogramHovered]  = acc_hov;
+    c[ImGuiCol_TableHeaderBg]         = bg2;
+    c[ImGuiCol_TableBorderStrong]     = sep;
+    c[ImGuiCol_TableBorderLight]      = bg3;
+    c[ImGuiCol_TextSelectedBg]        = ImVec4(accent.x, accent.y, accent.z, 0.35f);
+    c[ImGuiCol_NavHighlight]          = accent;
+}
+
+void UI::ApplyLightTheme()
+{
+    ImGui::StyleColorsLight();
+
+    ImVec4 bg0     = ImVec4(0.90f, 0.90f, 0.94f, 1.00f);
+    ImVec4 bg1     = ImVec4(0.95f, 0.95f, 0.98f, 1.00f);
+    ImVec4 bg2     = ImVec4(0.98f, 0.98f, 1.00f, 1.00f);
+    ImVec4 bg3     = ImVec4(0.84f, 0.84f, 0.90f, 1.00f);
+    ImVec4 bg4     = ImVec4(0.76f, 0.76f, 0.84f, 1.00f);
+    ImVec4 accent  = ImVec4(0.10f, 0.48f, 0.82f, 1.00f);
+    ImVec4 acc_hov = ImVec4(0.08f, 0.38f, 0.70f, 1.00f);
+    ImVec4 acc_act = ImVec4(0.06f, 0.28f, 0.58f, 1.00f);
+    ImVec4 text    = ImVec4(0.10f, 0.10f, 0.14f, 1.00f);
+    ImVec4 text_d  = ImVec4(0.50f, 0.50f, 0.58f, 1.00f);
+    ImVec4 sep     = ImVec4(0.74f, 0.74f, 0.80f, 1.00f);
+
+    ImVec4* c = ImGui::GetStyle().Colors;
+    c[ImGuiCol_Text]                  = text;
+    c[ImGuiCol_TextDisabled]          = text_d;
+    c[ImGuiCol_WindowBg]              = bg1;
+    c[ImGuiCol_ChildBg]               = bg0;
+    c[ImGuiCol_PopupBg]               = bg2;
+    c[ImGuiCol_Border]                = sep;
+    c[ImGuiCol_BorderShadow]          = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_FrameBg]               = bg2;
+    c[ImGuiCol_FrameBgHovered]        = bg3;
+    c[ImGuiCol_FrameBgActive]         = bg4;
+    c[ImGuiCol_TitleBg]               = bg0;
+    c[ImGuiCol_TitleBgActive]         = bg0;
+    c[ImGuiCol_TitleBgCollapsed]      = bg0;
+    c[ImGuiCol_MenuBarBg]             = bg0;
+    c[ImGuiCol_ScrollbarBg]           = bg0;
+    c[ImGuiCol_ScrollbarGrab]         = bg3;
+    c[ImGuiCol_ScrollbarGrabHovered]  = bg4;
+    c[ImGuiCol_ScrollbarGrabActive]   = accent;
+    c[ImGuiCol_CheckMark]             = accent;
+    c[ImGuiCol_SliderGrab]            = accent;
+    c[ImGuiCol_SliderGrabActive]      = acc_act;
+    c[ImGuiCol_Button]                = bg3;
+    c[ImGuiCol_ButtonHovered]         = bg4;
+    c[ImGuiCol_ButtonActive]          = accent;
+    c[ImGuiCol_Header]                = bg3;
+    c[ImGuiCol_HeaderHovered]         = bg4;
+    c[ImGuiCol_HeaderActive]          = accent;
+    c[ImGuiCol_Separator]             = sep;
+    c[ImGuiCol_SeparatorHovered]      = acc_hov;
+    c[ImGuiCol_SeparatorActive]       = accent;
+    c[ImGuiCol_ResizeGrip]            = bg3;
+    c[ImGuiCol_ResizeGripHovered]     = acc_hov;
+    c[ImGuiCol_ResizeGripActive]      = accent;
+    c[ImGuiCol_Tab]                   = bg3;
+    c[ImGuiCol_TabHovered]            = acc_hov;
+    c[ImGuiCol_TabSelected]           = accent;
+    c[ImGuiCol_TabDimmed]             = bg1;
+    c[ImGuiCol_TabDimmedSelected]     = bg4;
+    c[ImGuiCol_DockingPreview]        = ImVec4(accent.x, accent.y, accent.z, 0.40f);
+    c[ImGuiCol_DockingEmptyBg]        = bg0;
+    c[ImGuiCol_PlotLines]             = accent;
+    c[ImGuiCol_PlotLinesHovered]      = acc_hov;
+    c[ImGuiCol_PlotHistogram]         = accent;
+    c[ImGuiCol_PlotHistogramHovered]  = acc_hov;
+    c[ImGuiCol_TableHeaderBg]         = bg3;
+    c[ImGuiCol_TableBorderStrong]     = sep;
+    c[ImGuiCol_TableBorderLight]      = bg3;
+    c[ImGuiCol_TextSelectedBg]        = ImVec4(accent.x, accent.y, accent.z, 0.25f);
+    c[ImGuiCol_NavHighlight]          = accent;
 }
 
 void UI::DrawSettingsPanel()
 {
     ImGui::Begin("Settings");
 
-    static int theme = 0; // 0=Dark, 1=Light, 2=Classic
-    if(ImGui::RadioButton("Dark",    &theme, 0)) ImGui::StyleColorsDark();
+    static int theme = 0; // 0=Dark, 1=Light
+    if(ImGui::RadioButton("Dark",  &theme, 0)) ApplyDarkTheme();
     ImGui::SameLine();
-    if(ImGui::RadioButton("Light",   &theme, 1)) ImGui::StyleColorsLight();
-    ImGui::SameLine();
-    if(ImGui::RadioButton("Classic", &theme, 2)) ImGui::StyleColorsClassic();
+    if(ImGui::RadioButton("Light", &theme, 1)) ApplyLightTheme();
 
     ImGui::End();
 }
