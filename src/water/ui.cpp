@@ -358,6 +358,16 @@ void UI::DrawPIV()
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
+    if(piv_textures[0] == nullptr)
+    {
+        // Auto-range all three maps on first build
+        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+        for(int i = 0; i < 3; i++)
+        {
+            piv_cmap_min[i] = maps[i]->minCoeff();
+            piv_cmap_max[i] = maps[i]->maxCoeff();
+        }
+    }
     bool dirty = (piv_textures[0] == nullptr);
     for(int i = 0; i < 3; i++)
         dirty |= (piv_cmap_min[i] != last_min[i] || piv_cmap_max[i] != last_max[i]);
@@ -376,7 +386,7 @@ void UI::DrawPIV()
     float field_h_mm = field.height * px_to_mm;
 
     // --- Layout ---
-    float scale_w   = 65.0f;
+    float scale_w   = 85.0f;
     float controls_h = ImGui::GetFrameHeightWithSpacing() * 2 + ImGui::GetStyle().ItemSpacing.y;
     float avail_w   = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
     float avail_h   = ImGui::GetContentRegionAvail().y - controls_h;
@@ -401,10 +411,13 @@ void UI::DrawPIV()
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             int col = (int)(mouse.x / px_to_mm);
-            int row = (int)(mouse.y / px_to_mm);
+            int row = field.height - 1 - (int)(mouse.y / px_to_mm); // flip: plot y is bottom-up, matrix row is top-down
             const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
-                ImGui::SetTooltip("%.4f", (*maps[piv_map])(row, col));
+            {
+                const char* unit = (piv_map == 0) ? " dn/du" : (piv_map == 1) ? " dn/dv" : "";
+                ImGui::SetTooltip("%.4f%s", (*maps[piv_map])(row, col), unit);
+            }
         }
 
         ImPlot::PlotImage("##heatmap", (ImTextureID)piv_textures[piv_map],
@@ -422,17 +435,25 @@ void UI::DrawPIV()
     float auto_btn_w = ImGui::CalcTextSize("Auto").x + ImGui::GetStyle().FramePadding.x * 2;
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
-    ImGui::SetNextItemWidth(half_w);
-    ImGui::SliderFloat("Min##cmap", &piv_cmap_min[piv_map], -10.0f, piv_cmap_max[piv_map]);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(half_w);
-    ImGui::SliderFloat("Max##cmap", &piv_cmap_max[piv_map], piv_cmap_min[piv_map], 10.0f);
-    ImGui::SameLine();
-    if(ImGui::Button("Auto##cmap"))
     {
         const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
-        piv_cmap_min[piv_map] = maps[piv_map]->minCoeff();
-        piv_cmap_max[piv_map] = maps[piv_map]->maxCoeff();
+        float data_min = maps[piv_map]->minCoeff();
+        float data_max = maps[piv_map]->maxCoeff();
+        float step = (data_max - data_min) / 200.0f;
+        int decimals = std::max(0, (int)std::ceil(-std::log10(step)));
+        char fmt[16];
+        snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
+        ImGui::SetNextItemWidth(half_w);
+        ImGui::SliderFloat("Min##cmap", &piv_cmap_min[piv_map], data_min, piv_cmap_max[piv_map], fmt);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(half_w);
+        ImGui::SliderFloat("Max##cmap", &piv_cmap_max[piv_map], piv_cmap_min[piv_map], data_max, fmt);
+        ImGui::SameLine();
+        if(ImGui::Button("Auto##cmap"))
+        {
+            piv_cmap_min[piv_map] = data_min;
+            piv_cmap_max[piv_map] = data_max;
+        }
     }
 
     ImGui::End();
@@ -487,11 +508,21 @@ void UI::DrawVal()
     static StageState last_val_state = Idle;
     StageState cur_val_state = session.GetStageState(STAGE_VAL);
     if(cur_val_state == Done && last_val_state != Done)
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
     last_val_state = cur_val_state;
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
+    if(val_textures[0] == nullptr)
+    {
+        // Auto-range all three maps on first build
+        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+        for(int i = 0; i < 3; i++)
+        {
+            val_cmap_min[i] = maps[i]->minCoeff();
+            val_cmap_max[i] = maps[i]->maxCoeff();
+        }
+    }
     bool dirty = (val_textures[0] == nullptr);
     for(int i = 0; i < 3; i++)
         dirty |= (val_cmap_min[i] != last_min[i] || val_cmap_max[i] != last_max[i]);
@@ -510,7 +541,7 @@ void UI::DrawVal()
     float field_h_mm = field.height * px_to_mm;
 
     // --- Layout ---
-    float scale_w   = 65.0f;
+    float scale_w   = 85.0f;
     float controls_h = ImGui::GetFrameHeightWithSpacing() * 2 + ImGui::GetStyle().ItemSpacing.y;
     float avail_w   = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
     float avail_h   = ImGui::GetContentRegionAvail().y - controls_h;
@@ -535,10 +566,13 @@ void UI::DrawVal()
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             int col = (int)(mouse.x / px_to_mm);
-            int row = (int)(mouse.y / px_to_mm);
+            int row = field.height - 1 - (int)(mouse.y / px_to_mm);
             const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
-                ImGui::SetTooltip("%.4f", (*maps[val_map])(row, col));
+            {
+                const char* unit = (val_map == 0) ? " dn/du" : (val_map == 1) ? " dn/dv" : "";
+                ImGui::SetTooltip("%.4f%s", (*maps[val_map])(row, col), unit);
+            }
         }
 
         ImPlot::PlotImage("##heatmap", (ImTextureID)val_textures[val_map],
@@ -556,17 +590,25 @@ void UI::DrawVal()
     float auto_btn_w = ImGui::CalcTextSize("Auto").x + ImGui::GetStyle().FramePadding.x * 2;
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
-    ImGui::SetNextItemWidth(half_w);
-    ImGui::SliderFloat("Min##cmap", &val_cmap_min[val_map], -10.0f, val_cmap_max[val_map]);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(half_w);
-    ImGui::SliderFloat("Max##cmap", &val_cmap_max[val_map], val_cmap_min[val_map], 10.0f);
-    ImGui::SameLine();
-    if(ImGui::Button("Auto##cmap"))
     {
         const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
-        val_cmap_min[val_map] = maps[val_map]->minCoeff();
-        val_cmap_max[val_map] = maps[val_map]->maxCoeff();
+        float data_min = maps[val_map]->minCoeff();
+        float data_max = maps[val_map]->maxCoeff();
+        float step = (data_max - data_min) / 200.0f;
+        int decimals = std::max(0, (int)std::ceil(-std::log10(step)));
+        char fmt[16];
+        snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
+        ImGui::SetNextItemWidth(half_w);
+        ImGui::SliderFloat("Min##cmap", &val_cmap_min[val_map], data_min, val_cmap_max[val_map], fmt);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(half_w);
+        ImGui::SliderFloat("Max##cmap", &val_cmap_max[val_map], val_cmap_min[val_map], data_max, fmt);
+        ImGui::SameLine();
+        if(ImGui::Button("Auto##cmap"))
+        {
+            val_cmap_min[val_map] = data_min;
+            val_cmap_max[val_map] = data_max;
+        }
     }
 
     ImGui::End();
@@ -641,7 +683,7 @@ void UI::DrawSurf()
     float field_h_mm = surface.rows() * px_to_mm;
 
     // --- Layout ---
-    float scale_w    = 65.0f;
+    float scale_w    = 85.0f;
     float controls_h = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     float avail_w    = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
     float avail_h    = ImGui::GetContentRegionAvail().y - controls_h;
@@ -661,9 +703,9 @@ void UI::DrawSurf()
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             int col = (int)(mouse.x / px_to_mm);
-            int row = (int)(mouse.y / px_to_mm);
+            int row = (int)surface.rows() - 1 - (int)(mouse.y / px_to_mm);
             if(col >= 0 && col < surface.cols() && row >= 0 && row < surface.rows())
-                ImGui::SetTooltip("%.6f dn", surface(row, col));
+                ImGui::SetTooltip("%.4f dn", surface(row, col));
         }
 
         ImPlot::PlotImage("##surfimage", (ImTextureID)surf_texture,
@@ -681,16 +723,24 @@ void UI::DrawSurf()
     float auto_btn_w = ImGui::CalcTextSize("Auto").x + ImGui::GetStyle().FramePadding.x * 2;
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
-    ImGui::SetNextItemWidth(half_w);
-    ImGui::SliderFloat("Min##surfcmap", &surf_cmap_min, -1.0f, 1.0f);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(half_w);
-    ImGui::SliderFloat("Max##surfcmap", &surf_cmap_max, -1.0f, 1.0f);
-    ImGui::SameLine();
-    if(ImGui::Button("Auto##surfcmap"))
     {
-        surf_cmap_min = surface.minCoeff();
-        surf_cmap_max = surface.maxCoeff();
+        float data_min = surface.minCoeff();
+        float data_max = surface.maxCoeff();
+        float step = (data_max - data_min) / 200.0f;
+        int decimals = std::max(0, (int)std::ceil(-std::log10(step)));
+        char fmt[16];
+        snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
+        ImGui::SetNextItemWidth(half_w);
+        ImGui::SliderFloat("Min##surfcmap", &surf_cmap_min, data_min, surf_cmap_max, fmt);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(half_w);
+        ImGui::SliderFloat("Max##surfcmap", &surf_cmap_max, surf_cmap_min, data_max, fmt);
+        ImGui::SameLine();
+        if(ImGui::Button("Auto##surfcmap"))
+        {
+            surf_cmap_min = data_min;
+            surf_cmap_max = data_max;
+        }
     }
 
     ImGui::End();

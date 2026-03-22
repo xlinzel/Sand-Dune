@@ -1,7 +1,7 @@
 #include <grains/reconstruction.h>
 #include <numbers>
 
-Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const OpticalParameters& parameters) const
+Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
 {
     //Mean Subtraction (account for tilt) ------------------------------------------------------------
     //Could remove real gradient data from large refractive index migration in material
@@ -109,13 +109,7 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const OpticalPa
     
     fftwf_destroy_plan(inv_plan);
 
-    //Post integration conversion S -> relative refractive index
-    float Z_B = parameters.Z_d + parameters.Z_a;
-    float z_i = parameters.f * Z_B / (Z_B - parameters.f);
-    float p_mm = parameters.P_px * 1e-3f;  // µm → mm
-
-    surface.array() *= p_mm * parameters.Z_a * (Z_B - parameters.f)
-                    / (parameters.f * parameters.Z_d * parameters.t * z_i);
+    // No scaling needed — u/v were fully converted to dn/d(grid index) in Session
 
     return surface;
 }

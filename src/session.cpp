@@ -69,7 +69,7 @@ void Session::RunReconstruction()
         return;
 
     Reconstruction recon;
-    surface = recon.Compute(processfield, opticalparameters);
+    surface = recon.Compute(processfield);
 
     stagestates[STAGE_RECON] = Done;
 
@@ -102,6 +102,16 @@ void Session::RunPIVAsync()
             rawfield = piv.Compute(mask.ApplyMask(ref.GetMat()), mask.ApplyMask(flow.GetMat()));
         else
             rawfield = piv.Compute(ref.GetMat(), flow.GetMat());
+
+        // Convert pixel displacement -> dn/d(grid index), fully scaled
+        // Reconstruction only needs to integrate — no further scaling required
+        float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
+        float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
+        float scale = opticalparameters.P_px * 1e-3f
+                      * opticalparameters.Z_a * (Z_B - opticalparameters.f)
+                      / (opticalparameters.f * opticalparameters.Z_d * opticalparameters.t * z_i);
+        rawfield.u.array() *= scale;
+        rawfield.v.array() *= scale;
 
         stagestates[STAGE_PIV] = Done;
         stagestates[STAGE_VAL] = Ready;
@@ -140,7 +150,7 @@ void Session::RunReconstructionAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         Reconstruction recon;
-        surface = recon.Compute(processfield, opticalparameters);
+        surface = recon.Compute(processfield);
 
         stagestates[STAGE_RECON] = Done;
     });
