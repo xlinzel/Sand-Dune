@@ -18,6 +18,7 @@ public:
     void Draw();
     void DrawLoadPanel();
     void DrawParametersPanel();
+    void DrawCalculationsPanel();
     void DrawPipelinePanel();
     void DrawCalcualtionsPanel();
     void DrawVisualizationPanel();

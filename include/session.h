@@ -45,6 +45,8 @@ public:
     void RunValidationAsync();
     void RunReconstructionAsync();
 
+    void ScaleFields();
+
     //TODO: apply mask function
 
     const Image& GetRef() const;
@@ -53,8 +55,8 @@ public:
     const std::string& GetRefPath() const;
     const std::string& GetFlowPath() const;
 
-    const VectorField& GetRawField() const;
-    const VectorField& GetProcessedField() const;
+    const VectorField& GetPIVField() const;
+    const VectorField& GetValField() const;
     const Eigen::MatrixXf& GetSurface() const;
     StageState GetStageState(Stages s) const;
     //Mask open variables
@@ -70,7 +72,13 @@ private:
     Image ref, flow;
     Mask mask;
 
-    VectorField rawfield, processfield;
+    VectorField raw_piv_field;
+    VectorField piv_field;
+    
+    VectorField raw_val_field;
+    VectorField val_field;
+
+    Eigen::MatrixXf raw_surface;
     Eigen::MatrixXf surface;
 
     StageState stagestates[STAGE_TOTAL];

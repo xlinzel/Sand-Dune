@@ -216,7 +216,7 @@ TEST_CASE("Full Pipeline Test")
     std::cout << "PIV Elapsed Time: " << FormatTime(begin, end) << "\n";
 
     CHECK(session.GetStageState(STAGE_PIV) == Done);
-    session.GetRawField().SaveCSV(std::string(PROJECT_DIR) + "/csv/result.csv");
+    session.GetPIVField().SaveCSV(std::string(PROJECT_DIR) + "/csv/result.csv");
 
     //-----------------------------------------------------------------------------
     // VALIDATION
@@ -227,7 +227,7 @@ TEST_CASE("Full Pipeline Test")
     std::cout << "Post Process Elapsed Time: " << FormatTime(begin, end) << "\n";
 
     CHECK(session.GetStageState(STAGE_VAL) == Done);
-    session.GetProcessedField().SaveCSV(std::string(PROJECT_DIR) + "/csv/processed.csv");
+    session.GetValField().SaveCSV(std::string(PROJECT_DIR) + "/csv/processed.csv");
 
     //-----------------------------------------------------------------------------
     // RECONSTRUCTION

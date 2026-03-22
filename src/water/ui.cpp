@@ -45,6 +45,8 @@ void UI::Draw()
 
     DrawParametersPanel();
 
+    DrawCalculationsPanel();
+
     DrawPipelinePanel();
 
     DrawFlowPanel();
@@ -163,14 +165,14 @@ void UI::DrawParametersPanel()
     ImGui::SeparatorText("Experimental Parameters");
     ImGui::PushItemWidth(-230.0f);
 
-    ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
-    ImGui::InputFloat("Sensor Pixel Pitch (um)", &session.opticalparameters.P_px, 0.05f);
-    ImGui::InputFloat("Background -> Sample (mm)", &session.opticalparameters.Z_d, 25.0f);
-    ImGui::InputFloat("Sample -> Lens (mm)", &session.opticalparameters.Z_a, 25.0f);
-    ImGui::InputFloat("Lens Focal Length (mm)", &session.opticalparameters.f, 5.0f);
+    bool params_changed = false;
+    params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
+    params_changed |= ImGui::InputFloat("Sensor Pixel Pitch (um)", &session.opticalparameters.P_px, 0.05f);
+    params_changed |= ImGui::InputFloat("Background -> Sample (mm)", &session.opticalparameters.Z_d, 25.0f);
+    params_changed |= ImGui::InputFloat("Sample -> Lens (mm)", &session.opticalparameters.Z_a, 25.0f);
+    params_changed |= ImGui::InputFloat("Lens Focal Length (mm)", &session.opticalparameters.f, 5.0f);
     ImGui::InputFloat("Aperture Diameter (mm)", &session.opticalparameters.d_a, 1.0f);
-    ImGui::InputFloat("Background Dot Diameter (mm)", &session.opticalparameters.d_bg, 0.05f);
-    
+
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Mask Parameters");
     ImGui::PushItemWidth(-100.0f);
@@ -182,6 +184,90 @@ void UI::DrawParametersPanel()
     ImGui::SliderInt("Radius", &session.radius, 0, 2820);
 
     ImGui::PopItemWidth();
+    ImGui::SeparatorText("Background Pattern");
+    ImGui::PushItemWidth(-230.0f);
+    ImGui::InputFloat("Dot Diameter (mm)", &session.opticalparameters.d_bg, 0.05f);
+    ImGui::PopItemWidth();
+
+    ImGui::End();
+
+    //Scale fields and null textures so they are rebuilt next frame
+    if(params_changed)
+    {
+        session.ScaleFields();
+        // Null textures so Draw functions rebuild them next frame
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+        SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+    }
+}
+
+void UI::DrawCalculationsPanel()
+{
+    ImGui::Begin("Calculations");
+
+    const auto& op = session.opticalparameters;
+
+    const float lambda = 550e-9f;
+    float f    = op.f    * 1e-3f;
+    float Z_a  = op.Z_a  * 1e-3f;
+    float Z_d  = op.Z_d  * 1e-3f;
+    float d_a  = op.d_a  * 1e-3f;
+    float dot  = op.d_bg * 1e-3f;
+    float P_px = op.P_px * 1e-6f;
+    float Z_B  = Z_a + Z_d;
+
+    ImVec4 col_g = ImVec4(0.2f, 0.85f, 0.3f,  1.0f);
+    ImVec4 col_y = ImVec4(1.0f, 0.85f, 0.1f,  1.0f);
+    ImVec4 col_r = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+    ImVec4 col_d = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+
+    // Helper: label on left, colored value on right
+    auto Val = [&](const char* label, ImVec4 col, const char* fmt, ...)
+    {
+        ImGui::TextColored(col_d, "%s", label);
+        ImGui::SameLine(180.0f);
+        va_list args; va_start(args, fmt);
+        char buf[64]; vsnprintf(buf, sizeof(buf), fmt, args); va_end(args);
+        ImGui::TextColored(col, "%s", buf);
+    };
+
+    if(Z_B <= f * 1.001f)
+    {
+        ImGui::TextColored(col_r, "INVALID: Z_B (%.0f mm) must be > f (%.0f mm)", Z_B * 1e3f, f * 1e3f);
+        ImGui::End();
+        return;
+    }
+
+    float z_i      = f * Z_B / (Z_B - f);
+    float M_bg     = z_i / Z_B;
+    float M_a      = z_i / Z_a;
+    float dphys_px = (dot * M_bg) / P_px;
+    float dd_px    = 2.44f * (f / d_a) * (M_bg + 1.0f) * lambda / P_px;
+    float deff_px  = std::sqrt(dphys_px * dphys_px + dd_px * dd_px);
+    int   win      = 16; while(win < (int)(deff_px * 4.0f)) win *= 2;
+
+    // Physical size of each output grid cell in the sample plane
+    int   step     = session.pivparameters.window_size - session.pivparameters.overlap;
+    float res_mm   = step * P_px * Z_a / z_i * 1e3f;
+
+    //ImGui::SeparatorText("Inputs Used");
+    //ImGui::TextColored(col_d, "f=%.1fmm  Z_a=%.0fmm  Z_d=%.0fmm  d_a=%.1fmm  d_bg=%.2fmm  P_px=%.2fum",
+    //    op.f, op.Z_a, op.Z_d, op.d_a, op.d_bg, op.P_px);
+
+    ImGui::SeparatorText("Optics");
+    Val("z_i (sensor dist)",   col_g,                                     "%.2f mm",  z_i  * 1e3f);
+    Val("M_background",        col_d,                                     "%.5f",     M_bg);
+    Val("M_aerogel",           col_d,                                     "%.5f",     M_a);
+
+    ImGui::SeparatorText("Blur");
+    Val("d_physical",  dphys_px < 0.5f ? col_r : dphys_px > 5.0f ? col_y : col_g,   "%.2f px",  dphys_px);
+    Val("d_diffraction", dd_px > 7.0f  ? col_r : dd_px    > 4.0f ? col_y : col_g,   "%.2f px",  dd_px);
+    Val("d_eff",       deff_px < 1.0f || deff_px > 8.0f ? col_r : deff_px > 4.0f ? col_y : col_g, "%.2f px", deff_px);
+
+    ImGui::SeparatorText("PIV");
+    Val("Suggested window",    col_g,                                     "%d px",    win);
+    Val("Spatial resolution",  res_mm > 5.0f ? col_r : res_mm > 2.0f ? col_y : col_g, "%.2f mm", res_mm);
 
     ImGui::End();
 }
@@ -306,7 +392,7 @@ void UI::DrawVisualizationPanel()
 
 void UI::RebuildPIVTextures()
 {
-    const VectorField& field = session.GetRawField();
+    const VectorField& field = session.GetPIVField();
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
@@ -347,7 +433,7 @@ void UI::DrawPIV()
 {
     ImGui::Begin("PIV Results");
 
-    const VectorField& field = session.GetRawField();
+    const VectorField& field = session.GetPIVField();
 
     // --- Invalidate textures when PIV reruns ---
     static StageState last_piv_state = Idle;
@@ -461,7 +547,7 @@ void UI::DrawPIV()
 
 void UI::RebuildValTextures()
 {
-    const VectorField& field = session.GetProcessedField();
+    const VectorField& field = session.GetValField();
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
@@ -502,7 +588,7 @@ void UI::DrawVal()
 {
     ImGui::Begin("Val Results");
 
-    const VectorField& field = session.GetProcessedField();
+    const VectorField& field = session.GetValField();
 
     // --- Invalidate textures when Validation reruns ---
     static StageState last_val_state = Idle;

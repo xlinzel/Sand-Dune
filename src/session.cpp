@@ -41,7 +41,7 @@ void Session::RunPIV()
         return;
 
     PIV piv(pivparameters);
-    rawfield = piv.Compute(ref.GetMat(), flow.GetMat());
+    raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat());
 
     stagestates[STAGE_PIV] = Done;
     stagestates[STAGE_VAL] = Ready;
@@ -55,7 +55,7 @@ void Session::RunValidation()
         return;
 
     Validation post;
-    processfield = post.PostProcess(rawfield);
+    raw_val_field = post.PostProcess(raw_piv_field);
 
     stagestates[STAGE_VAL] = Done;
     stagestates[STAGE_RECON] = Ready;
@@ -69,7 +69,7 @@ void Session::RunReconstruction()
         return;
 
     Reconstruction recon;
-    surface = recon.Compute(processfield);
+    surface = recon.Compute(raw_val_field);
 
     stagestates[STAGE_RECON] = Done;
 
@@ -99,19 +99,11 @@ void Session::RunPIVAsync()
         PIV piv(pivparameters);
         
         if(mask_apply)
-            rawfield = piv.Compute(mask.ApplyMask(ref.GetMat()), mask.ApplyMask(flow.GetMat()));
+            raw_piv_field = piv.Compute(mask.ApplyMask(ref.GetMat()), mask.ApplyMask(flow.GetMat()));
         else
-            rawfield = piv.Compute(ref.GetMat(), flow.GetMat());
+            raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat());
 
-        // Convert pixel displacement -> dn/d(grid index), fully scaled
-        // Reconstruction only needs to integrate — no further scaling required
-        float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
-        float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
-        float scale = opticalparameters.P_px * 1e-3f
-                      * opticalparameters.Z_a * (Z_B - opticalparameters.f)
-                      / (opticalparameters.f * opticalparameters.Z_d * opticalparameters.t * z_i);
-        rawfield.u.array() *= scale;
-        rawfield.v.array() *= scale;
+        ScaleFields();
 
         stagestates[STAGE_PIV] = Done;
         stagestates[STAGE_VAL] = Ready;
@@ -131,7 +123,9 @@ void Session::RunValidationAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         Validation post;
-        processfield = post.PostProcess(rawfield);
+        raw_val_field = post.PostProcess(raw_piv_field);
+
+        ScaleFields();
 
         stagestates[STAGE_VAL] = Done;
         stagestates[STAGE_RECON] = Ready;
@@ -150,12 +144,55 @@ void Session::RunReconstructionAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         Reconstruction recon;
-        surface = recon.Compute(processfield);
+        raw_surface = recon.Compute(raw_val_field);
+
+        ScaleFields();
 
         stagestates[STAGE_RECON] = Done;
     });
 
     return;
+}
+
+void Session::ScaleFields()
+{
+    // Clamp parameters to physically valid minimums to prevent division by zero
+    opticalparameters.t    = std::max(opticalparameters.t,    0.001f);
+    opticalparameters.P_px = std::max(opticalparameters.P_px, 0.001f);
+    opticalparameters.Z_d  = std::max(opticalparameters.Z_d,  0.001f);
+    opticalparameters.Z_a  = std::max(opticalparameters.Z_a,  0.001f);
+    opticalparameters.f    = std::max(opticalparameters.f,    0.001f);
+
+    // Convert pixel displacement -> dn/d(grid index), fully scaled
+    // Reconstruction only needs to integrate — no further scaling required
+    float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
+    float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
+    float scale = opticalparameters.P_px * 1e-3f
+                * opticalparameters.Z_a * (Z_B - opticalparameters.f)
+                / (opticalparameters.f * opticalparameters.Z_d * opticalparameters.t * z_i);
+
+    if(stagestates[STAGE_PIV] != Idle && stagestates[STAGE_PIV] != Ready)
+    {
+        piv_field.u      = raw_piv_field.u.array() * scale;
+        piv_field.v      = raw_piv_field.v.array() * scale;
+        piv_field.s2n    = raw_piv_field.s2n;
+        piv_field.width  = raw_piv_field.width;
+        piv_field.height = raw_piv_field.height;
+    }
+
+    if(stagestates[STAGE_VAL] != Idle && stagestates[STAGE_VAL] != Ready)
+    {
+        val_field.u      = raw_val_field.u.array() * scale;
+        val_field.v      = raw_val_field.v.array() * scale;
+        val_field.s2n    = raw_val_field.s2n;
+        val_field.width  = raw_val_field.width;
+        val_field.height = raw_val_field.height;
+    }
+    
+    if(stagestates[STAGE_RECON] != Idle && stagestates[STAGE_RECON] != Ready)
+    {
+        surface = raw_surface.array() * scale;
+    }
 }
 
 const Image& Session::GetRef() const
@@ -178,14 +215,14 @@ const std::string& Session::GetFlowPath() const
     return flow_path;
 }
 
-const VectorField& Session::GetRawField() const
+const VectorField& Session::GetPIVField() const
 {
-    return rawfield;
+    return piv_field;
 }
 
-const VectorField& Session::GetProcessedField() const
+const VectorField& Session::GetValField() const
 {
-    return processfield;
+    return val_field;
 }
 
 const Eigen::MatrixXf& Session::GetSurface() const
