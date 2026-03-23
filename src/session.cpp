@@ -7,6 +7,13 @@ Session::Session()
     stagestates[STAGE_RECON] = Idle;
 }
 
+Session::~Session()
+{
+    stop_requested = true;
+    if(activetask.valid())
+        activetask.wait();
+}
+
 void Session::LoadRef(const std::string& path)
 {
     ref_path = path;
@@ -91,11 +98,16 @@ void Session::RunPIVAsync()
     if(stagestates[STAGE_VAL]   == Done) stagestates[STAGE_VAL]   = Dirty;
     if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
 
+    progress = 0.0f;
+    task_start = std::chrono::steady_clock::now();
+
     activetask = std::async(std::launch::async, [this]()
     {
         PIV piv(pivparameters);
-        
-        raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat());
+
+        raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat(), [this](float p){ progress = p; });
+
+        if(stop_requested) return;
 
         ScaleFields();
 
@@ -113,6 +125,9 @@ void Session::RunValidationAsync()
 
     stagestates[STAGE_VAL] = Busy;
     if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
+
+    progress = 0.0f;
+    task_start = std::chrono::steady_clock::now();
 
     activetask = std::async(std::launch::async, [this]()
     {
@@ -138,16 +153,19 @@ void Session::RunReconstructionAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         if(mask_apply)
-            mask.GenBinCircleMask(ref.GetWidth(), ref.GetHeight(), {posx, posy}, radius);
+        {
+            float step = (float)(pivparameters.window_size - pivparameters.overlap);
+            mask.GenBinCircleMask(raw_val_field.width, raw_val_field.height,
+                {posx / step, posy / step}, radius / step);
+        }
 
         Reconstruction recon;
 
-        
         if(mask_apply)
         {
             VectorField temp = raw_val_field;
             temp.u = mask.ApplyMask(temp.u);
-            temp.v = mask.ApplyMask(temp.u);
+            temp.v = mask.ApplyMask(temp.v);
             raw_surface = recon.Compute(temp);
         }
         else
@@ -199,6 +217,27 @@ void Session::ScaleFields()
     if(stagestates[STAGE_RECON] != Idle && stagestates[STAGE_RECON] != Ready)
     {
         surface = raw_surface.array() * scale;
+    }
+}
+
+void Session::SaveSurfaceCSV(const std::string& path)
+{
+    std::ofstream file;
+    file.open(path);
+
+    if(!file.is_open())
+        return;
+
+    file << "rows,cols\n";
+    file << surface.rows() << "," << surface.cols() << "\n";
+
+    //Collumn major format
+    for(int j = 0; j < surface.cols(); j++)
+    {
+        for(int i = 0; i < surface.rows(); i++)
+        {
+            file << surface(i, j) << "\n";
+        }
     }
 }
 

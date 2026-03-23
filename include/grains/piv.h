@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 #include <wind/vectorfield.h>
 #include <iostream>
+#include <functional>
 #include <fftw3.h>
 #include <wind/pivparameters.h>
 
@@ -23,7 +24,8 @@ public:
     PIV(const PIVParameters parameters);
     ~PIV();
 
-    VectorField Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow);
+    VectorField Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow, 
+                        std::function<void(float)> on_progress = nullptr);
 
     int GetWindowSize() const;
     int GetOverlap() const;

@@ -1,4 +1,5 @@
 #include <water/ui.h>
+#include <filesystem>
 
 UI::UI(Session& session, SDL_Renderer* renderer)
     : session(session), renderer(renderer)
@@ -53,6 +54,7 @@ void UI::Draw()
     DrawRefPanel();
 
     DrawSettingsPanel();
+    DrawSavePanel();
 
     DrawVisualizationPanel();
 }
@@ -308,6 +310,25 @@ void UI::DrawPipelinePanel()
     
     if(was_disabled)
         ImGui::EndDisabled();
+
+    if(session.GetStageState(STAGE_PIV) == Busy)
+    {
+        float p = session.progress.load();
+        ImGui::ProgressBar(p, ImVec2(-1, 0));
+        if(p > 0.02f)
+        {
+            float elapsed = std::chrono::duration<float>(
+                std::chrono::steady_clock::now() - session.task_start).count();
+
+            float time_s = elapsed / p * (1.0f - p);
+
+            int hrs = time_s / 3600;
+            int mins = ((int)time_s % 3600) / 60;
+            int s = (int)time_s % 60;
+
+            ImGui::Text("ETA: %d:%02d:%02d", hrs, mins, s);
+        }
+    }
 
     //----------------------------
     //Validation
@@ -1188,4 +1209,70 @@ void UI::OnFlowSelected(void* userdata, const char* const* filelist, int filter)
     UI* ui = static_cast<UI*>(userdata);
     if(filelist && filelist[0])
         ui->pending_flow_path = filelist[0];
+}
+
+void UI::DrawSavePanel()
+{
+    ImGui::Begin("Save");
+
+    // --- Directory picker ---
+    ImGui::SeparatorText("Output Directory");
+    ImGui::TextWrapped("%s", save_dir.c_str());
+
+    bool was_open = save_dir_dialog_open;
+    if(was_open) ImGui::BeginDisabled();
+    if(ImGui::Button("Browse##savedir"))
+    {
+        save_dir_dialog_open = true;
+        SDL_ShowOpenFolderDialog(OnSaveDirSelected, this, nullptr, save_dir.c_str(), false);
+    }
+    if(was_open) ImGui::EndDisabled();
+
+    // --- File name ---
+    ImGui::SeparatorText("File Name");
+    static char name_buf[256] = "output";
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##savename", name_buf, sizeof(name_buf));
+
+    std::string base = save_dir + "/" + std::string(name_buf);
+
+    bool any_done = session.GetStageState(STAGE_PIV)   == Done ||
+                    session.GetStageState(STAGE_VAL)   == Done ||
+                    session.GetStageState(STAGE_RECON) == Done;
+
+    ImGui::SeparatorText("Export");
+
+    if(!any_done) ImGui::BeginDisabled();
+    if(ImGui::Button("Save All", ImVec2(-1, 0)))
+    {
+        std::filesystem::create_directories(save_dir);
+        if(session.GetStageState(STAGE_PIV)   == Done) session.GetPIVField().SaveCSV(base + "_piv.csv");
+        if(session.GetStageState(STAGE_VAL)   == Done) session.GetValField().SaveCSV(base + "_val.csv");
+        if(session.GetStageState(STAGE_RECON) == Done) session.SaveSurfaceCSV(base + "_surface.csv");
+    }
+    if(!any_done) ImGui::EndDisabled();
+
+    ImGui::Spacing();
+
+    if(session.GetStageState(STAGE_PIV) != Done) ImGui::BeginDisabled();
+    if(ImGui::Button("Save PIV",     ImVec2(-1, 0))) { std::filesystem::create_directories(save_dir); session.GetPIVField().SaveCSV(base + "_piv.csv"); }
+    if(session.GetStageState(STAGE_PIV) != Done) ImGui::EndDisabled();
+
+    if(session.GetStageState(STAGE_VAL) != Done) ImGui::BeginDisabled();
+    if(ImGui::Button("Save Val",     ImVec2(-1, 0))) { std::filesystem::create_directories(save_dir); session.GetValField().SaveCSV(base + "_val.csv"); }
+    if(session.GetStageState(STAGE_VAL) != Done) ImGui::EndDisabled();
+
+    if(session.GetStageState(STAGE_RECON) != Done) ImGui::BeginDisabled();
+    if(ImGui::Button("Save Surface", ImVec2(-1, 0))) { std::filesystem::create_directories(save_dir); session.SaveSurfaceCSV(base + "_surface.csv"); }
+    if(session.GetStageState(STAGE_RECON) != Done) ImGui::EndDisabled();
+
+    ImGui::End();
+}
+
+void UI::OnSaveDirSelected(void* userdata, const char* const* filelist, int filter)
+{
+    UI* ui = static_cast<UI*>(userdata);
+    if(filelist && filelist[0])
+        ui->save_dir = filelist[0];
+    ui->save_dir_dialog_open = false;
 }

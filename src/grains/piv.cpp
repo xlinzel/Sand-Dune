@@ -68,7 +68,8 @@ void PIV::FreeFFTBuffers()
     if(ccmap_raw) fftwf_free(ccmap_raw);
 }
 
-VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow)
+VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow,
+                        std::function<void(float)> on_progress)
 {
     Eigen::Vector2i ref_size(reference.rows(), reference.cols());
     Eigen::Vector2i flow_size(flow.rows(), flow.cols());
@@ -80,6 +81,9 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
 
     int margin = (search_size - window_size) / 2;
     int movement = window_size - overlap;
+
+    int total_windows = floor(ref_size(0) / movement) * floor(ref_size(1) / movement);
+    int completed = 0;
 
     VectorField vectorfield(floor(ref_size(0) / movement),floor(ref_size(1) / movement));
 
@@ -130,6 +134,8 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
             vectorfield.u(win_row, win_col) = peak.u;
             vectorfield.v(win_row, win_col) = peak.v;
             vectorfield.s2n(win_row, win_col) = peak.s2n;
+
+            if(on_progress) on_progress(++completed / (float)total_windows);
         }
     }
 

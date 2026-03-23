@@ -1,6 +1,8 @@
 #pragma once
 
 #include <future>
+#include <chrono>
+#include <fstream>
 
 #include <sun/image.h>
 #include <sun/mask.h>
@@ -32,6 +34,7 @@ class Session
 {
 public:
     Session();
+    ~Session();
 
     void LoadRef(const std::string& path);
     void LoadFlow(const std::string& path);
@@ -47,7 +50,7 @@ public:
 
     void ScaleFields();
 
-    //TODO: apply mask function
+    void SaveSurfaceCSV(const std::string& path);
 
     const Image& GetRef() const;
     const Image& GetFlow() const;
@@ -67,6 +70,10 @@ public:
 
     PIVParameters pivparameters;
     OpticalParameters opticalparameters;
+    
+    //Progress tracking
+    std::atomic<float> progress{0.0f};
+    std::chrono::steady_clock::time_point task_start;
 private:
     std::string ref_path, flow_path;
     Image ref, flow;
@@ -83,6 +90,8 @@ private:
 
     StageState stagestates[STAGE_TOTAL];
 
+
     //Async
+    std::atomic<bool> stop_requested{false};
     std::future<void> activetask;
 };

@@ -28,6 +28,7 @@ public:
     void DrawSurf();
 
     void DrawSettingsPanel();
+    void DrawSavePanel();
 
     void DrawRefPanel();
     void DrawFlowPanel();
@@ -37,6 +38,7 @@ public:
 
     static void OnRefSelected(void* userdata, const char* const* filelist, int filter);
     static void OnFlowSelected(void* userdata, const char* const* filelist, int filter);
+    static void OnSaveDirSelected(void* userdata, const char* const* filelist, int filter);
 
 private:
     void RebuildPIVTextures();
@@ -69,6 +71,9 @@ private:
     std::string pending_ref_path;
     std::string pending_flow_path;
     bool file_dialog_open = false;
+
+    std::string save_dir = ".";
+    bool save_dir_dialog_open = false;
 
     //Background image rendering
     SDL_Surface* surf = nullptr;
