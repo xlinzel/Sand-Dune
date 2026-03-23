@@ -380,13 +380,33 @@ void UI::DrawPipelinePanel()
 
 void UI::DrawVisualizationPanel()
 {
-    if(session.GetStageState(STAGE_PIV) == Done)
+    // Track state transitions here so Draw* functions see them even when not called during Busy
+    static StageState last_piv  = Idle;
+    static StageState last_val  = Idle;
+    static StageState last_recon = Idle;
+
+    StageState cur_piv   = session.GetStageState(STAGE_PIV);
+    StageState cur_val   = session.GetStageState(STAGE_VAL);
+    StageState cur_recon = session.GetStageState(STAGE_RECON);
+
+    if(cur_piv == Done && last_piv != Done)
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+    if(cur_val == Done && last_val != Done)
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+    if(cur_recon == Done && last_recon != Done)
+        { SDL_DestroyTexture(surf_texture); surf_texture = nullptr; }
+
+    last_piv   = cur_piv;
+    last_val   = cur_val;
+    last_recon = cur_recon;
+
+    if(cur_piv == Done)
         DrawPIV();
 
-    if(session.GetStageState(STAGE_VAL) == Done)
+    if(cur_val == Done)
         DrawVal();
 
-    if(session.GetStageState(STAGE_RECON) == Done)
+    if(cur_recon == Done)
         DrawSurf();
 }
 
@@ -434,13 +454,6 @@ void UI::DrawPIV()
     ImGui::Begin("PIV Results");
 
     const VectorField& field = session.GetPIVField();
-
-    // --- Invalidate textures when PIV reruns ---
-    static StageState last_piv_state = Idle;
-    StageState cur_piv_state = session.GetStageState(STAGE_PIV);
-    if(cur_piv_state == Done && last_piv_state != Done)
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
-    last_piv_state = cur_piv_state;
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};

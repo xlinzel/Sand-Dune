@@ -93,15 +93,9 @@ void Session::RunPIVAsync()
 
     activetask = std::async(std::launch::async, [this]()
     {
-        if(mask_apply)
-            mask.GenBinCircleMask(ref.GetWidth(), ref.GetHeight(), {posx, posy}, radius);
-
         PIV piv(pivparameters);
         
-        if(mask_apply)
-            raw_piv_field = piv.Compute(mask.ApplyMask(ref.GetMat()), mask.ApplyMask(flow.GetMat()));
-        else
-            raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat());
+        raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat());
 
         ScaleFields();
 
@@ -143,8 +137,21 @@ void Session::RunReconstructionAsync()
 
     activetask = std::async(std::launch::async, [this]()
     {
+        if(mask_apply)
+            mask.GenBinCircleMask(ref.GetWidth(), ref.GetHeight(), {posx, posy}, radius);
+
         Reconstruction recon;
-        raw_surface = recon.Compute(raw_val_field);
+
+        
+        if(mask_apply)
+        {
+            VectorField temp = raw_val_field;
+            temp.u = mask.ApplyMask(temp.u);
+            temp.v = mask.ApplyMask(temp.u);
+            raw_surface = recon.Compute(temp);
+        }
+        else
+            raw_surface = recon.Compute(raw_val_field);
 
         ScaleFields();
 
