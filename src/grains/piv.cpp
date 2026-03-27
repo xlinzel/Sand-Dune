@@ -160,7 +160,7 @@ Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, con
     Eigen::MatrixXf flow_hann = w_flow.array() * hann2d.array();
 
     //Copy data into a row major matrix for more efficient FFT buffer filling
-        //FFT uses row major storage, while Eigen by default uses collumn major
+        //FFT uses row major storage, Eigen by default uses collumn major
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> ref_rm = ref_hann;
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> flow_rm = flow_hann;
 
@@ -268,7 +268,7 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
         //Get the peak on the subtracted plane
         peak = ccmap_flattened.maxCoeff();
 
-        int mask_size = 5;
+        int mask_size = 10;
         int r0 = std::max(0, row - mask_size);
         int c0 = std::max(0, col - mask_size);
         int r1 = std::min((int)ccmap.rows(), row + mask_size + 1);

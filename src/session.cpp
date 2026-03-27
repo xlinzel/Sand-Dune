@@ -189,12 +189,18 @@ void Session::ScaleFields()
     opticalparameters.f    = std::max(opticalparameters.f,    0.001f);
 
     // Convert pixel displacement -> dn/d(grid index), fully scaled
-    // Reconstruction only needs to integrate — no further scaling required
+    // Reconstruction only needs to integrate - no further scaling required
     float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
     float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
+
+    float divisor = b_ref 
+                    ? opticalparameters.t                          // RI mode: divide by thickness
+                    : (opticalparameters.n - 1.0f);               // thickness mode: divide by (n-1)
+    divisor = std::max(divisor, 0.001f);
+
     float scale = opticalparameters.P_px * 1e-3f
                 * opticalparameters.Z_a * (Z_B - opticalparameters.f)
-                / (opticalparameters.f * opticalparameters.Z_d * opticalparameters.t * z_i);
+                / (opticalparameters.f * opticalparameters.Z_d * divisor * z_i);
 
     if(stagestates[STAGE_PIV] != Idle && stagestates[STAGE_PIV] != Ready)
     {

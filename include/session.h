@@ -13,6 +13,10 @@
 #include <wind/opticalparameters.h>
 #include <wind/pivparameters.h>
 
+//https://link.springer.com/article/10.1007/s00348-015-1927-5
+//https://link.springer.com/article/10.1007/s00348-005-0016-6
+//https://link.springer.com/article/10.1007/s00348-010-0985-y
+
 enum StageState
 {
     Idle,
@@ -74,6 +78,9 @@ public:
     //Progress tracking
     std::atomic<float> progress{0.0f};
     std::chrono::steady_clock::time_point task_start;
+
+    //Refractive index/thickness toggle
+    bool b_ref = true;
 private:
     std::string ref_path, flow_path;
     Image ref, flow;
@@ -89,7 +96,6 @@ private:
     Eigen::MatrixXf surface;
 
     StageState stagestates[STAGE_TOTAL];
-
 
     //Async
     std::atomic<bool> stop_requested{false};

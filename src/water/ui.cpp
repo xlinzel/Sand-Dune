@@ -168,13 +168,30 @@ void UI::DrawParametersPanel()
     ImGui::PushItemWidth(-230.0f);
 
     bool params_changed = false;
-    params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
     params_changed |= ImGui::InputFloat("Sensor Pixel Pitch (um)", &session.opticalparameters.P_px, 0.05f);
     params_changed |= ImGui::InputFloat("Background -> Sample (mm)", &session.opticalparameters.Z_d, 25.0f);
     params_changed |= ImGui::InputFloat("Sample -> Lens (mm)", &session.opticalparameters.Z_a, 25.0f);
     params_changed |= ImGui::InputFloat("Lens Focal Length (mm)", &session.opticalparameters.f, 5.0f);
     ImGui::InputFloat("Aperture Diameter (mm)", &session.opticalparameters.d_a, 1.0f);
 
+    ImGui::PopItemWidth();
+    ImGui::SeparatorText("Reconstruction Mode");
+
+    ImGui::TextDisabled("Solve for:");
+    if(ImGui::RadioButton("RI Variation (uniform t)",       session.b_ref == true))  session.b_ref = true;
+    if(ImGui::RadioButton("Thickness Variation (uniform n)", session.b_ref == false)) session.b_ref = false;
+
+    ImGui::PushItemWidth(-230.0f);
+    if(session.b_ref)
+    {
+        params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
+        ImGui::TextDisabled("Output units: delta-n (dimensionless)");
+    }
+    else
+    {
+        params_changed |= ImGui::InputFloat("Refractive Index (n)", &session.opticalparameters.n, 0.01f);
+        ImGui::TextDisabled("Output units: thickness (mm)");
+    }
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Mask Parameters");
     ImGui::PushItemWidth(-100.0f);
@@ -437,7 +454,7 @@ void UI::RebuildPIVTextures()
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
-    // Build RGBA pixel buffer (temporary — SDL copies it)
+    // Build RGBA pixel buffer (temporary - SDL copies it)
     std::vector<uint8_t> pixels(w * h * 4);
 
     ImPlot::PushColormap(ImPlotColormap_Viridis);
@@ -460,7 +477,7 @@ void UI::RebuildPIVTextures()
             }
         }
 
-        // Upload to GPU — nearest-neighbor scaling for hard pixel boundaries
+        // Upload to GPU, nearest-neighbor scaling for hard pixel boundaries
         if(piv_textures[i]) SDL_DestroyTexture(piv_textures[i]);
         piv_textures[i] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
                                             SDL_TEXTUREACCESS_STATIC, w, h);
@@ -803,13 +820,16 @@ void UI::DrawSurf()
     float field_h_mm = surface.rows() * px_to_mm;
 
     // --- Layout ---
-    float scale_w    = 85.0f;
+    float scale_w    = 110.0f;
     float controls_h = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     float avail_w    = ImGui::GetContentRegionAvail().x - scale_w - ImGui::GetStyle().ItemSpacing.x;
     float avail_h    = ImGui::GetContentRegionAvail().y - controls_h;
     float ratio      = (float)surface.rows() / (float)surface.cols();
     float plot_h     = std::min(avail_h, avail_w * ratio);
     float plot_w     = plot_h / ratio;
+
+    const char* units     = session.b_ref ? "dn"  : "mm";
+    const char* scale_lbl = session.b_ref ? "dn"  : "t (mm)";
 
     // --- Surface plot ---
     if(ImPlot::BeginPlot("##surfplot", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
@@ -825,7 +845,7 @@ void UI::DrawSurf()
             int col = (int)(mouse.x / px_to_mm);
             int row = (int)surface.rows() - 1 - (int)(mouse.y / px_to_mm);
             if(col >= 0 && col < surface.cols() && row >= 0 && row < surface.rows())
-                ImGui::SetTooltip("%.4f dn", surface(row, col));
+                ImGui::SetTooltip("%.4f %s", surface(row, col), units);
         }
 
         ImPlot::PlotImage("##surfimage", (ImTextureID)surf_texture,
@@ -836,7 +856,7 @@ void UI::DrawSurf()
     // --- Colormap scale bar ---
     ImGui::SameLine();
     ImPlot::PushColormap(ImPlotColormap_Viridis);
-    ImPlot::ColormapScale("##surfscale", surf_cmap_min, surf_cmap_max, ImVec2(scale_w, plot_h));
+    ImPlot::ColormapScale(scale_lbl, surf_cmap_min, surf_cmap_max, ImVec2(scale_w, plot_h));
     ImPlot::PopColormap();
 
     // --- Range controls: Min | Max | Auto ---
