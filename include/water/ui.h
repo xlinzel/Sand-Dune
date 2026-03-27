@@ -69,7 +69,7 @@ private:
     float surf_cmap_max = 0.1f;
 
     std::string pending_ref_path;
-    std::string pending_flow_path;
+    std::vector<std::string> pending_flow_paths;
     bool file_dialog_open = false;
 
     std::string save_dir = ".";

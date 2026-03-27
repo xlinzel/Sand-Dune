@@ -199,7 +199,7 @@ TEST_CASE("Full Pipeline Test")
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     session.LoadRef(std::string(PROJECT_DIR) + "/images/ref.bmp");
-    session.LoadFlow(std::string(PROJECT_DIR) + "/images/flow.bmp");
+    session.LoadFlow({std::string(PROJECT_DIR) + "/images/flow.bmp"});
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";

@@ -74,16 +74,16 @@ void UI::DrawLoadPanel()
         file_dialog_open = false;
     }
     
-    if(!pending_flow_path.empty())
+    if(!pending_flow_paths.empty())
     {
-        session.LoadFlow(pending_flow_path);
+        session.LoadFlow(pending_flow_paths);
 
-        surf = SDL_LoadBMP(pending_flow_path.c_str());
+        surf = SDL_LoadBMP(pending_flow_paths[0].c_str());
         if(flow_tex) SDL_DestroyTexture(flow_tex);
         flow_tex = SDL_CreateTextureFromSurface(renderer, surf);
         SDL_DestroySurface(surf);
 
-        pending_flow_path.clear();
+        pending_flow_paths.clear();
         file_dialog_open = false;
     }
 
@@ -122,16 +122,21 @@ void UI::DrawLoadPanel()
 
     ImGui::SeparatorText("Flow Image");
 
-    if(session.GetFlow().GetLoaded())
+    if(session.HasFlow())
         ImGui::TextColored(ImVec4(0,1,0,1), "[OK]");
     else
         ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "[!]");
         
     ImGui::SameLine();
-    if(session.GetFlow().GetLoaded())
-        ImGui::TextWrapped("%s", session.GetFlowPath().c_str());
-    else
+    if(!session.HasFlow())
         ImGui::TextDisabled("No file loaded");
+    else
+    {
+        ImGui::BeginChild("##flowlist", ImVec2(0, 60), true);
+        for(const auto& p : session.GetFlowPaths())
+            ImGui::TextUnformatted(p.c_str());
+        ImGui::EndChild();
+    }
 
     if(was_open) ImGui::BeginDisabled();
 
@@ -139,10 +144,35 @@ void UI::DrawLoadPanel()
     {
         file_dialog_open = true;
         SDL_DialogFileFilter filters[] = {{"BMP", "bmp"}, {"PNG", "png"}, {"All File", "*"}};
-        SDL_ShowOpenFileDialog(OnFlowSelected, this, nullptr, filters, 2, nullptr, false);
+        SDL_ShowOpenFileDialog(OnFlowSelected, this, nullptr, filters, 2, nullptr, true); // allow_many=true
     }
 
     if(was_open) ImGui::EndDisabled();
+
+    if(session.GetFlowCount() > 1)
+  {
+      ImGui::SeparatorText("Active Image");
+      int idx = session.GetActiveIndex();
+
+      if(ImGui::Button("< Prev") && idx > 0)
+      {
+          session.SetActiveIndex(idx - 1);
+          // Null textures so they rebuild for new active image
+          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+          SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+      }
+      ImGui::SameLine();
+      if(ImGui::Button("Next >") && idx < session.GetFlowCount() - 1)
+      {
+          session.SetActiveIndex(idx + 1);
+          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+          SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+      }
+      ImGui::SameLine();
+      ImGui::Text("%d / %d", idx + 1, session.GetFlowCount());
+  }
 
     ImGui::End();
 }
@@ -295,6 +325,61 @@ void UI::DrawPipelinePanel()
 {
     ImGui::Begin("Pipeline");
 
+    
+
+    //----------------------------
+    //Full Pipeline
+    //----------------------------
+
+    ImGui::SeparatorText("Full Run");
+    
+    ImGui::Text("Status: ");
+    ImGui::SameLine();
+    switch (session.GetStageState(STAGE_PIV))
+    {
+        case Idle:
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "[Idle]"); break;
+        case Ready:
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1), "[Ready]"); break;
+        case Busy:
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.1f, 1), "[Busy]"); break;
+        case Done:
+            ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1), "[Done]"); break;
+        case Dirty:
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
+    }
+
+    bool was_disabled = (session.GetStageState(STAGE_PIV) != Ready && session.GetStageState(STAGE_PIV) != Done && session.GetStageState(STAGE_PIV) != Dirty) || session.IsRunning();
+    if(was_disabled)
+        ImGui::BeginDisabled();
+
+    if(ImGui::Button("Run Full Pipeline"))
+    {
+        session.RunAllAsync();
+    }
+    
+    if(was_disabled)
+        ImGui::EndDisabled();
+
+    if(session.GetStageState(STAGE_PIV) == Busy)
+    {
+        float p = session.progress.load();
+        ImGui::ProgressBar(p, ImVec2(-1, 0));
+        if(p > 0.02f)
+        {
+            float elapsed = std::chrono::duration<float>(
+                std::chrono::steady_clock::now() - session.task_start).count();
+
+            float time_s = elapsed / p * (1.0f - p);
+
+            int hrs = time_s / 3600;
+            int mins = ((int)time_s % 3600) / 60;
+            int s = (int)time_s % 60;
+
+            ImGui::Text("ETA: %d:%02d:%02d", hrs, mins, s);
+        }
+    }
+
     //----------------------------
     //PIV
     //----------------------------
@@ -316,7 +401,7 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    bool was_disabled = (session.GetStageState(STAGE_PIV) != Ready && session.GetStageState(STAGE_PIV) != Done && session.GetStageState(STAGE_PIV) != Dirty) || session.IsRunning();
+    was_disabled = (session.GetStageState(STAGE_PIV) != Ready && session.GetStageState(STAGE_PIV) != Done && session.GetStageState(STAGE_PIV) != Dirty) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
@@ -412,7 +497,7 @@ void UI::DrawPipelinePanel()
     
     if(was_disabled)
         ImGui::EndDisabled();
-
+    
     ImGui::End();
 }
 
@@ -1220,6 +1305,8 @@ void UI::DrawRefPanel()
 void UI::OnRefSelected(void* userdata, const char* const* filelist, int filter)
 {
     UI* ui = static_cast<UI*>(userdata);
+    ui->file_dialog_open = false;
+
     if(filelist && filelist[0])
         ui->pending_ref_path = filelist[0];
 }
@@ -1227,8 +1314,14 @@ void UI::OnRefSelected(void* userdata, const char* const* filelist, int filter)
 void UI::OnFlowSelected(void* userdata, const char* const* filelist, int filter)
 {
     UI* ui = static_cast<UI*>(userdata);
-    if(filelist && filelist[0])
-        ui->pending_flow_path = filelist[0];
+    ui->file_dialog_open = false;
+
+    if(filelist == nullptr)
+        return;
+
+    ui->pending_flow_paths.clear();
+    for(int i = 0; filelist[i] != nullptr; i++)
+        ui->pending_flow_paths.push_back(filelist[i]);
 }
 
 void UI::DrawSavePanel()
@@ -1262,29 +1355,19 @@ void UI::DrawSavePanel()
 
     ImGui::SeparatorText("Export");
 
-    if(!any_done) ImGui::BeginDisabled();
+    bool saving = session.IsSaving();
+    if(saving) ImGui::BeginDisabled();
+
     if(ImGui::Button("Save All", ImVec2(-1, 0)))
     {
         std::filesystem::create_directories(save_dir);
-        if(session.GetStageState(STAGE_PIV)   == Done) session.GetPIVField().SaveCSV(base + "_piv.csv");
-        if(session.GetStageState(STAGE_VAL)   == Done) session.GetValField().SaveCSV(base + "_val.csv");
-        if(session.GetStageState(STAGE_RECON) == Done) session.SaveSurfaceCSV(base + "_surface.csv");
+        session.SaveAsync(base);
     }
-    if(!any_done) ImGui::EndDisabled();
 
-    ImGui::Spacing();
+    if(saving) ImGui::EndDisabled();
 
-    if(session.GetStageState(STAGE_PIV) != Done) ImGui::BeginDisabled();
-    if(ImGui::Button("Save PIV",     ImVec2(-1, 0))) { std::filesystem::create_directories(save_dir); session.GetPIVField().SaveCSV(base + "_piv.csv"); }
-    if(session.GetStageState(STAGE_PIV) != Done) ImGui::EndDisabled();
-
-    if(session.GetStageState(STAGE_VAL) != Done) ImGui::BeginDisabled();
-    if(ImGui::Button("Save Val",     ImVec2(-1, 0))) { std::filesystem::create_directories(save_dir); session.GetValField().SaveCSV(base + "_val.csv"); }
-    if(session.GetStageState(STAGE_VAL) != Done) ImGui::EndDisabled();
-
-    if(session.GetStageState(STAGE_RECON) != Done) ImGui::BeginDisabled();
-    if(ImGui::Button("Save Surface", ImVec2(-1, 0))) { std::filesystem::create_directories(save_dir); session.SaveSurfaceCSV(base + "_surface.csv"); }
-    if(session.GetStageState(STAGE_RECON) != Done) ImGui::EndDisabled();
+    if(saving)
+        ImGui::Text("Saving...");
 
     ImGui::End();
 }

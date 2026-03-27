@@ -41,26 +41,40 @@ public:
     ~Session();
 
     void LoadRef(const std::string& path);
-    void LoadFlow(const std::string& path);
+    void LoadFlow(const std::vector<std::string>& paths);
 
     void RunPIV();
     void RunValidation();
     void RunReconstruction();
     
     bool IsRunning() const;
+
     void RunPIVAsync();
     void RunValidationAsync();
     void RunReconstructionAsync();
+    void RunAllAsync();
 
     void ScaleFields();
 
-    void SaveSurfaceCSV(const std::string& path);
+    bool IsSaving() const;
+    void SaveAsync(const std::string& base_path);
+
+    void SavePIVCSV(const std::string& base_path);
+    void SaveValCSV(const std::string& base_path);
+    void SaveSurfaceCSV(const std::string& base_path);
 
     const Image& GetRef() const;
     const Image& GetFlow() const;
     
     const std::string& GetRefPath() const;
     const std::string& GetFlowPath() const;
+
+    void SetActiveIndex(int i);
+    int GetActiveIndex() const;
+
+    bool HasFlow() const;
+    int GetFlowCount() const;
+    const std::vector<std::string>& GetFlowPaths() const;
 
     const VectorField& GetPIVField() const;
     const VectorField& GetValField() const;
@@ -82,22 +96,28 @@ public:
     //Refractive index/thickness toggle
     bool b_ref = true;
 private:
-    std::string ref_path, flow_path;
-    Image ref, flow;
+    std::string ref_path;
+    std::vector<std::string> flow_paths;
+    std::atomic<int> batch_index{0};
+    Image ref;
+    std::vector<Image> flows;
     Mask mask;
 
-    VectorField raw_piv_field;
-    VectorField piv_field;
+    std::vector<VectorField> raw_piv_field;
+    std::vector<VectorField> piv_field;
     
-    VectorField raw_val_field;
-    VectorField val_field;
+    std::vector<VectorField> raw_val_field;
+    std::vector<VectorField> val_field;
 
-    Eigen::MatrixXf raw_surface;
-    Eigen::MatrixXf surface;
+    std::vector<Eigen::MatrixXf> raw_surface;
+    std::vector<Eigen::MatrixXf> surface;
+
+    int active_index = 0;
 
     StageState stagestates[STAGE_TOTAL];
 
     //Async
     std::atomic<bool> stop_requested{false};
     std::future<void> activetask;
+    std::future<void> save_task;
 };

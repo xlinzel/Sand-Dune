@@ -10,8 +10,8 @@ Session::Session()
 Session::~Session()
 {
     stop_requested = true;
-    if(activetask.valid())
-        activetask.wait();
+    if(activetask.valid()) activetask.wait();
+    if(save_task.valid())  save_task.wait();
 }
 
 void Session::LoadRef(const std::string& path)
@@ -19,7 +19,7 @@ void Session::LoadRef(const std::string& path)
     ref_path = path;
     ref.Load(path.c_str());
 
-    if(ref.GetLoaded() && flow.GetLoaded())
+    if(ref.GetLoaded() && !flows.empty() && flows[0].GetLoaded())
     {
         stagestates[STAGE_PIV] = Ready;
     }
@@ -28,18 +28,30 @@ void Session::LoadRef(const std::string& path)
     posy = GetRef().GetHeight() / 2;
 }
 
-void Session::LoadFlow(const std::string& path)
+void Session::LoadFlow(const std::vector<std::string>& paths)
 {
-    flow_path = path;
-    flow.Load(path.c_str());
+    flow_paths = paths;
+    flows.clear();
+    flows.resize(paths.size());
 
-    if(ref.GetLoaded() && flow.GetLoaded())
-    {
-        stagestates[STAGE_PIV] = Ready;
-    }
+    // Reset pipeline
+    stagestates[STAGE_PIV]   = Idle;
+    stagestates[STAGE_VAL]   = Idle;
+    stagestates[STAGE_RECON] = Idle;
+    raw_piv_field.clear(); piv_field.clear();
+    raw_val_field.clear(); val_field.clear();
+    raw_surface.clear();   surface.clear();
+    active_index = 0;
 
-    posx = GetFlow().GetWidth() / 2;
-    posy = GetFlow().GetHeight() / 2;
+    for(int i = 0; i < paths.size(); i++)
+        flows[i].Load(paths[i].c_str());
+
+    if(ref.GetLoaded() && !flows.empty() && flows[0].GetLoaded())
+      {
+          stagestates[STAGE_PIV] = Ready;
+          posx = flows[0].GetWidth()  / 2;
+          posy = flows[0].GetHeight() / 2;
+      }
 }
 
 void Session::RunPIV()
@@ -48,7 +60,12 @@ void Session::RunPIV()
         return;
 
     PIV piv(pivparameters);
-    raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat());
+    raw_piv_field.resize(flows.size());
+
+    for(int i = 0; i < (int)flows.size(); i++)
+    {
+        raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat());
+    }
 
     stagestates[STAGE_PIV] = Done;
     stagestates[STAGE_VAL] = Ready;
@@ -62,7 +79,12 @@ void Session::RunValidation()
         return;
 
     Validation post;
-    raw_val_field = post.PostProcess(raw_piv_field);
+    raw_val_field.resize(raw_piv_field.size());
+
+    for(int i = 0; i < (int)raw_piv_field.size(); i++)
+    {
+        raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
+    }
 
     stagestates[STAGE_VAL] = Done;
     stagestates[STAGE_RECON] = Ready;
@@ -76,7 +98,14 @@ void Session::RunReconstruction()
         return;
 
     Reconstruction recon;
-    surface = recon.Compute(raw_val_field);
+    raw_surface.resize(raw_val_field.size());
+    surface.resize(raw_val_field.size());
+
+    for(int i = 0; i < (int)raw_val_field.size(); i++)
+    {
+        raw_surface[i] = recon.Compute(raw_val_field[i]);
+        surface[i]     = raw_surface[i];
+    }
 
     stagestates[STAGE_RECON] = Done;
 
@@ -104,8 +133,14 @@ void Session::RunPIVAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         PIV piv(pivparameters);
+        int n = (int)flows.size();
+        raw_piv_field.resize(n);
 
-        raw_piv_field = piv.Compute(ref.GetMat(), flow.GetMat(), [this](float p){ progress = p; });
+        for(int i = 0; i < n; i++)
+        {
+            raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat(),
+                [this, i, n](float p){ progress = (i + p) / n; });
+        }
 
         if(stop_requested) return;
 
@@ -132,7 +167,13 @@ void Session::RunValidationAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         Validation post;
-        raw_val_field = post.PostProcess(raw_piv_field);
+        raw_val_field.resize(raw_piv_field.size());
+
+        for(int i = 0; i < (int)raw_piv_field.size(); i++)
+        {
+            raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
+            progress = (float)(i + 1) / raw_piv_field.size();
+        }
 
         ScaleFields();
 
@@ -155,21 +196,28 @@ void Session::RunReconstructionAsync()
         if(mask_apply)
         {
             float step = (float)(pivparameters.window_size - pivparameters.overlap);
-            mask.GenBinCircleMask(raw_val_field.width, raw_val_field.height,
+            mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
                 {posx / step, posy / step}, radius / step);
         }
 
         Reconstruction recon;
+        int n = (int)raw_val_field.size();
+        raw_surface.resize(n);
 
-        if(mask_apply)
+        for(int i = 0; i < n; i++)
         {
-            VectorField temp = raw_val_field;
-            temp.u = mask.ApplyMask(temp.u);
-            temp.v = mask.ApplyMask(temp.v);
-            raw_surface = recon.Compute(temp);
+            if(mask_apply)
+            {
+                VectorField temp = raw_val_field[i];
+                temp.u = mask.ApplyMask(temp.u);
+                temp.v = mask.ApplyMask(temp.v);
+                raw_surface[i] = recon.Compute(temp);
+            }
+            else
+                raw_surface[i] = recon.Compute(raw_val_field[i]);
+
+            progress = (float)(i + 1) / n;
         }
-        else
-            raw_surface = recon.Compute(raw_val_field);
 
         ScaleFields();
 
@@ -177,6 +225,81 @@ void Session::RunReconstructionAsync()
     });
 
     return;
+}
+
+
+
+void Session::RunAllAsync()
+{
+    if(stagestates[STAGE_PIV] == Idle || IsRunning())
+        return;
+
+    stagestates[STAGE_PIV]   = Busy;
+    stagestates[STAGE_VAL]   = Idle;
+    stagestates[STAGE_RECON] = Idle;
+
+    progress = 0.0f;
+    task_start = std::chrono::steady_clock::now();
+
+    activetask = std::async(std::launch::async, [this]()
+    {
+        int n = (int)flows.size();
+
+        // --- PIV ---
+        PIV piv(pivparameters);
+        raw_piv_field.resize(n);
+        for(int i = 0; i < n && !stop_requested; i++)
+            raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat(),
+                [this, i, n](float p){ progress = (i + p) / n / 3.0f; });
+
+        if(stop_requested) return;
+        ScaleFields();
+        stagestates[STAGE_PIV] = Done;
+        stagestates[STAGE_VAL] = Busy;
+
+        // --- Validation ---
+        Validation post;
+        raw_val_field.resize(n);
+        for(int i = 0; i < n && !stop_requested; i++)
+        {
+            raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
+            progress = 1.0f/3.0f + (float)(i + 1) / n / 3.0f;
+        }
+
+        if(stop_requested) return;
+        ScaleFields();
+        stagestates[STAGE_VAL] = Done;
+        stagestates[STAGE_RECON] = Busy;
+
+        // --- Reconstruction ---
+        if(mask_apply)
+        {
+            float step = (float)(pivparameters.window_size - pivparameters.overlap);
+            mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
+                {posx / step, posy / step}, radius / step);
+        }
+
+        Reconstruction recon;
+        raw_surface.resize(n);
+        for(int i = 0; i < n && !stop_requested; i++)
+        {
+            if(mask_apply)
+            {
+                VectorField temp = raw_val_field[i];
+                temp.u = mask.ApplyMask(temp.u);
+                temp.v = mask.ApplyMask(temp.v);
+                raw_surface[i] = recon.Compute(temp);
+            }
+            else
+                raw_surface[i] = recon.Compute(raw_val_field[i]);
+
+            progress = 2.0f/3.0f + (float)(i + 1) / n / 3.0f;
+        }
+
+        if(stop_requested) return;
+        ScaleFields();
+        stagestates[STAGE_RECON] = Done;
+    });
 }
 
 void Session::ScaleFields()
@@ -204,45 +327,121 @@ void Session::ScaleFields()
 
     if(stagestates[STAGE_PIV] != Idle && stagestates[STAGE_PIV] != Ready)
     {
-        piv_field.u      = raw_piv_field.u.array() * scale;
-        piv_field.v      = raw_piv_field.v.array() * scale;
-        piv_field.s2n    = raw_piv_field.s2n;
-        piv_field.width  = raw_piv_field.width;
-        piv_field.height = raw_piv_field.height;
+        piv_field.resize(raw_piv_field.size());
+        for(int i = 0; i < (int)raw_piv_field.size(); i++)
+        {
+            piv_field[i].u      = raw_piv_field[i].u.array() * scale;
+            piv_field[i].v      = raw_piv_field[i].v.array() * scale;
+            piv_field[i].s2n    = raw_piv_field[i].s2n;
+            piv_field[i].width  = raw_piv_field[i].width;
+            piv_field[i].height = raw_piv_field[i].height;
+        }
     }
 
     if(stagestates[STAGE_VAL] != Idle && stagestates[STAGE_VAL] != Ready)
     {
-        val_field.u      = raw_val_field.u.array() * scale;
-        val_field.v      = raw_val_field.v.array() * scale;
-        val_field.s2n    = raw_val_field.s2n;
-        val_field.width  = raw_val_field.width;
-        val_field.height = raw_val_field.height;
+        val_field.resize(raw_val_field.size());
+        for(int i = 0; i < (int)raw_val_field.size(); i++)
+        {
+            val_field[i].u      = raw_val_field[i].u.array() * scale;
+            val_field[i].v      = raw_val_field[i].v.array() * scale;
+            val_field[i].s2n    = raw_val_field[i].s2n;
+            val_field[i].width  = raw_val_field[i].width;
+            val_field[i].height = raw_val_field[i].height;
+        }
     }
-    
+
     if(stagestates[STAGE_RECON] != Idle && stagestates[STAGE_RECON] != Ready)
     {
-        surface = raw_surface.array() * scale;
+        surface.resize(raw_surface.size());
+        for(int i = 0; i < (int)raw_surface.size(); i++)
+            surface[i] = raw_surface[i].array() * scale;
     }
 }
 
-void Session::SaveSurfaceCSV(const std::string& path)
+ bool Session::IsSaving() const
 {
-    std::ofstream file;
-    file.open(path);
+    return save_task.valid() &&
+            save_task.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+}
 
-    if(!file.is_open())
-        return;
+void Session::SaveAsync(const std::string& base_path)
+{
+    if(IsSaving()) return;
 
-    file << "rows,cols\n";
-    file << surface.rows() << "," << surface.cols() << "\n";
-
-    //Collumn major format
-    for(int j = 0; j < surface.cols(); j++)
+    save_task = std::async(std::launch::async, [this, base_path]()
     {
-        for(int i = 0; i < surface.rows(); i++)
+        if(stagestates[STAGE_PIV]   == Done) SavePIVCSV(base_path + "_piv.csv");
+        if(stagestates[STAGE_VAL]   == Done) SaveValCSV(base_path + "_val.csv");
+        if(stagestates[STAGE_RECON] == Done) SaveSurfaceCSV(base_path + "_surface.csv");
+    });
+}
+
+void Session::SavePIVCSV(const std::string& base_path)
+{
+    for(int i = 0; i < (int)piv_field.size(); i++)
+    {
+        std::string path = base_path;
+        if(piv_field.size() > 1)
         {
-            file << surface(i, j) << "\n";
+            auto dot = base_path.rfind('.');
+            path = (dot != std::string::npos)
+                ? base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot)
+                : base_path + "_" + std::to_string(i);
+        }
+        piv_field[i].SaveCSV(path);
+    }
+}
+
+void Session::SaveValCSV(const std::string& base_path)
+{
+    for(int i = 0; i < (int)val_field.size(); i++)
+    {
+        std::string path = base_path;
+        if(val_field.size() > 1)
+        {
+            auto dot = base_path.rfind('.');
+            path = (dot != std::string::npos)
+                ? base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot)
+                : base_path + "_" + std::to_string(i);
+        }
+        val_field[i].SaveCSV(path);
+    }
+}
+
+void Session::SaveSurfaceCSV(const std::string& base_path)
+{
+    for(int i = 0; i < surface.size(); i++)
+    {
+        //Build filename
+        std::string path = base_path;
+        if(surface.size() > 1)
+        {
+            // Insert index before extension
+            auto dot = base_path.rfind('.');
+            if(dot != std::string::npos)
+                path = base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot);
+            else
+                path = base_path + "_" + std::to_string(i);
+        }
+
+        std::ofstream file;
+        file.open(path);
+
+        if(!file.is_open())
+            continue;
+
+        const Eigen::MatrixXf& s = surface[i];
+        file << "rows,cols\n";
+        file << s.rows() << "," << s.cols() << "\n";
+
+        //Collumn major format
+        for(int j = 0; j < s.cols(); j++)
+        {
+            for(int k = 0; k < s.rows(); k++)
+            {
+                file << s(k, j) << "\n";
+            }
         }
     }
 }
@@ -254,7 +453,7 @@ const Image& Session::GetRef() const
 
 const Image& Session::GetFlow() const
 {
-    return flow;
+    return flows[active_index];
 }
 
 const std::string& Session::GetRefPath() const
@@ -264,22 +463,36 @@ const std::string& Session::GetRefPath() const
 
 const std::string& Session::GetFlowPath() const
 {
-    return flow_path;
+    return flow_paths[active_index];
 }
+
+void Session::SetActiveIndex(int i)
+{
+    if(flows.empty()) return;
+    active_index = std::clamp(i, 0, (int)flows.size() - 1);
+}
+
+int Session::GetActiveIndex() const {return active_index;}
+
+bool Session::HasFlow() const       { return !flows.empty() && flows[0].GetLoaded(); }
+
+int  Session::GetFlowCount() const  { return (int)flows.size(); }
+
+const std::vector<std::string>& Session::GetFlowPaths() const { return flow_paths; }
 
 const VectorField& Session::GetPIVField() const
 {
-    return piv_field;
+    return piv_field[active_index];
 }
 
 const VectorField& Session::GetValField() const
 {
-    return val_field;
+    return val_field[active_index];
 }
 
 const Eigen::MatrixXf& Session::GetSurface() const
 {
-    return surface;
+    return surface[active_index];
 }
 
 StageState Session::GetStageState(Stages s) const
