@@ -120,7 +120,7 @@ void UI::DrawLoadPanel()
 
     if(was_open) ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Flow Image");
+    ImGui::SeparatorText("Flow Images");
 
     if(session.HasFlow())
         ImGui::TextColored(ImVec4(0,1,0,1), "[OK]");
@@ -241,7 +241,7 @@ void UI::DrawParametersPanel()
     ImGui::End();
 
     //Scale fields and null textures so they are rebuilt next frame
-    if(params_changed)
+    if(params_changed && !session.IsRunning())
     {
         session.ScaleFields();
         // Null textures so Draw functions rebuild them next frame
@@ -363,7 +363,7 @@ void UI::DrawPipelinePanel()
 
     if(session.GetStageState(STAGE_PIV) == Busy)
     {
-        float p = session.progress.load();
+        float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
         ImGui::ProgressBar(p, ImVec2(-1, 0));
         if(p > 0.02f)
         {
@@ -415,7 +415,7 @@ void UI::DrawPipelinePanel()
 
     if(session.GetStageState(STAGE_PIV) == Busy)
     {
-        float p = session.progress.load();
+        float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
         ImGui::ProgressBar(p, ImVec2(-1, 0));
         if(p > 0.02f)
         {
@@ -552,7 +552,7 @@ void UI::RebuildPIVTextures()
             for(int c = 0; c < w; c++)
             {
                 float t = (range != 0.0f) ? ((*data[i])(r, c) - piv_cmap_min[i]) / range : 0.0f;
-                t = std::clamp(t, 0.0f, 1.0f);
+                t = std::isfinite(t) ? std::clamp(t, 0.0f, 1.0f) : 0.0f;
                 ImVec4 col = ImPlot::SampleColormap(t);
                 int idx = (r * w + c) * 4;
                 pixels[idx+0] = (uint8_t)(col.x * 255);
@@ -700,7 +700,7 @@ void UI::RebuildValTextures()
             for(int c = 0; c < w; c++)
             {
                 float t = (range != 0.0f) ? ((*data[i])(r, c) - val_cmap_min[i]) / range : 0.0f;
-                t = std::clamp(t, 0.0f, 1.0f);
+                t = std::isfinite(t) ? std::clamp(t, 0.0f, 1.0f) : 0.0f;
                 ImVec4 col = ImPlot::SampleColormap(t);
                 int idx = (r * w + c) * 4;
                 pixels[idx+0] = (uint8_t)(col.x * 255);
@@ -852,7 +852,7 @@ void UI::RebuildSurfTexture()
         for(int c = 0; c < w; c++)
         {
             float t = (range != 0.0f) ? (surface(r, c) - surf_cmap_min) / range : 0.0f;
-            t = std::clamp(t, 0.0f, 1.0f);
+            t = std::isfinite(t) ? std::clamp(t, 0.0f, 1.0f) : 0.0f;
             ImVec4 col = ImPlot::SampleColormap(t);
             int idx = (r * w + c) * 4;
             pixels[idx+0] = (uint8_t)(col.x * 255);

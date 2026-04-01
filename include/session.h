@@ -93,6 +93,9 @@ public:
     std::atomic<float> progress{0.0f};
     std::chrono::steady_clock::time_point task_start;
 
+    //Refraction correction
+    bool n_correction = true;
+
     //Refractive index/thickness toggle
     bool b_ref = true;
 private:
@@ -105,6 +108,7 @@ private:
 
     std::vector<VectorField> raw_piv_field;
     std::vector<VectorField> piv_field;
+    Eigen::MatrixXf correction[2];
     
     std::vector<VectorField> raw_val_field;
     std::vector<VectorField> val_field;
