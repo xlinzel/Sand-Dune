@@ -94,7 +94,7 @@ public:
     std::chrono::steady_clock::time_point task_start;
 
     //Refraction correction
-    bool n_correction = true;
+    bool n_correction = false;
 
     //Refractive index/thickness toggle
     bool b_ref = true;

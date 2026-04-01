@@ -212,16 +212,12 @@ void UI::DrawParametersPanel()
     if(ImGui::RadioButton("Thickness Variation (uniform n)", session.b_ref == false)) session.b_ref = false;
 
     ImGui::PushItemWidth(-230.0f);
-    if(session.b_ref)
-    {
-        params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
-        ImGui::TextDisabled("Output units: delta-n (dimensionless)");
-    }
-    else
-    {
-        params_changed |= ImGui::InputFloat("Refractive Index (n)", &session.opticalparameters.n, 0.01f);
-        ImGui::TextDisabled("Output units: thickness (mm)");
-    }
+    
+    params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
+    ImGui::TextDisabled("Output units: delta-n (dimensionless)");
+    params_changed |= ImGui::InputFloat("Refractive Index (n)", &session.opticalparameters.n, 0.01f);
+    ImGui::TextDisabled("Output units: thickness (mm)");
+
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Mask Parameters");
     ImGui::PushItemWidth(-100.0f);
