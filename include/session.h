@@ -13,6 +13,8 @@
 #include <wind/opticalparameters.h>
 #include <wind/pivparameters.h>
 
+//https://pmc.ncbi.nlm.nih.gov/articles/PMC8747424/
+
 //https://link.springer.com/article/10.1007/s00348-015-1927-5
 //https://link.springer.com/article/10.1007/s00348-005-0016-6
 //https://link.springer.com/article/10.1007/s00348-010-0985-y
@@ -94,7 +96,7 @@ public:
     std::chrono::steady_clock::time_point task_start;
 
     //Refraction correction
-    bool n_correction = false;
+    bool n_correction = true;
 
     //Refractive index/thickness toggle
     bool b_ref = true;
@@ -105,6 +107,9 @@ private:
     Image ref;
     std::vector<Image> flows;
     Mask mask;
+
+    void ComputeRefractionCorrection(int h, int w);
+    void ApplyRefractionCorrection();
 
     std::vector<VectorField> raw_piv_field;
     std::vector<VectorField> piv_field;

@@ -63,14 +63,13 @@ void Session::RunPIV()
     raw_piv_field.resize(flows.size());
 
     for(int i = 0; i < (int)flows.size(); i++)
-    {
         raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat());
-    }
+
+    ApplyRefractionCorrection();
+    ScaleFields();
 
     stagestates[STAGE_PIV] = Done;
     stagestates[STAGE_VAL] = Ready;
-
-    return;
 }
 
 void Session::RunValidation()
@@ -86,10 +85,10 @@ void Session::RunValidation()
         raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
     }
 
+    ScaleFields();
+
     stagestates[STAGE_VAL] = Done;
     stagestates[STAGE_RECON] = Ready;
-
-    return;
 }
 
 void Session::RunReconstruction()
@@ -104,12 +103,11 @@ void Session::RunReconstruction()
     for(int i = 0; i < (int)raw_val_field.size(); i++)
     {
         raw_surface[i] = recon.Compute(raw_val_field[i]);
-        surface[i]     = raw_surface[i];
     }
 
-    stagestates[STAGE_RECON] = Done;
+    ScaleFields();
 
-    return;
+    stagestates[STAGE_RECON] = Done;
 }
 
 bool Session::IsRunning() const
@@ -144,13 +142,12 @@ void Session::RunPIVAsync()
 
         if(stop_requested) return;
 
+        ApplyRefractionCorrection();
         ScaleFields();
 
         stagestates[STAGE_PIV] = Done;
         stagestates[STAGE_VAL] = Ready;
     });
-
-    return;
 }
 
 void Session::RunValidationAsync()
@@ -245,92 +242,18 @@ void Session::RunAllAsync()
     {
         int n = (int)flows.size();
 
-        //Refrction correciton pre-computations
-        float f    = opticalparameters.f    * 1e-3f;
-        float Z_a  = opticalparameters.Z_a  * 1e-3f;
-        float Z_d  = opticalparameters.Z_d  * 1e-3f;
-        float P_px = opticalparameters.P_px * 1e-6f;
-        float t    = opticalparameters.t    * 1e-3f;
-        float Z_B  = Z_a + Z_d;
-        float z_i  = f * Z_B / (Z_B - f); 
-        int   step = pivparameters.window_size - pivparameters.overlap;
-
-        float m1 = Z_a / z_i;
-
-        //Pre-allocation
-        float sx = 0;
-        float sy = 0;
-
-        float rx = 0;
-        float ry = 0;
-
-        float theta_x = 0;
-        float theta_y = 0;
-
-        float thetar_x = 0;
-        float thetar_y = 0;
-
-        float dx = 0; //lateral ray displacement
-        float dy = 0; //lateral ray displacement
-
-        float dsx = 0;
-        float dsy = 0;
-
         // --- PIV ---
         PIV piv(pivparameters);
         raw_piv_field.resize(n);
-        bool correction_computed = false;
 
         for(int i = 0; i < n && !stop_requested; i++)
         {
             raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat(),
                 [this, i, n](float p){ progress = (i + p) / n; });
-
-            if(n_correction)
-            {
-                if(!correction_computed)
-                {
-                    int h = raw_piv_field[i].height;
-                    int w = raw_piv_field[i].width;
-                    correction[0] = Eigen::MatrixXf::Zero(h, w);
-                    correction[1] = Eigen::MatrixXf::Zero(h, w);
-                    
-                    for(int row = 0; row < raw_piv_field[i].height; row++)
-                    {
-                        for(int col = 0; col < raw_piv_field[i].width; col++)
-                        {
-                            // physical position on sensor relative to centre
-                            sx = (col - raw_piv_field[i].width/2.0f)  * step * P_px;
-                            sy = (row - raw_piv_field[i].height/2.0f) * step * P_px;
-
-                            rx = sx * m1;
-                            ry = sy * m1;
-
-                            theta_x = atanf(rx / Z_a);
-                            theta_y = atanf(ry / Z_a);
-
-                            thetar_x = asinf(sinf(theta_x) / opticalparameters.n);
-                            thetar_y = asinf(sinf(theta_y) / opticalparameters.n);
-
-                            dx = sinf(theta_x - thetar_x) * t / cosf(thetar_x); //lateral ray displacement
-                            dy = sinf(theta_y - thetar_y) * t / cosf(thetar_y); //lateral ray displacement
-
-                            dsx = dx / sinf((std::numbers::pi / 2) - theta_x);
-                            dsy = dy / sinf((std::numbers::pi / 2) - theta_y);
-
-                            correction[0](row, col) = dsx * z_i / (Z_B * P_px);
-                            correction[1](row, col) = dsy * z_i / (Z_B * P_px);
-                        }
-                    }
-                    correction_computed = true;
-                }
-
-                raw_piv_field[i].u -= correction[0];
-                raw_piv_field[i].v -= correction[1];
-            }
         }
 
         if(stop_requested) return;
+        ApplyRefractionCorrection();
         ScaleFields();
         stagestates[STAGE_PIV] = Done;
         stagestates[STAGE_VAL] = Busy;
@@ -378,6 +301,62 @@ void Session::RunAllAsync()
         ScaleFields();
         stagestates[STAGE_RECON] = Done;
     });
+}
+
+void Session::ComputeRefractionCorrection(int h, int w)
+{
+    float f    = opticalparameters.f    * 1e-3f;
+    float Z_a  = opticalparameters.Z_a  * 1e-3f;
+    float Z_d  = opticalparameters.Z_d  * 1e-3f;
+    float P_px = opticalparameters.P_px * 1e-6f;
+    float t    = opticalparameters.t    * 1e-3f;
+    float Z_B  = Z_a + Z_d;
+    float z_i  = f * Z_B / (Z_B - f);
+    int   step = pivparameters.window_size - pivparameters.overlap;
+    float m1   = Z_a / z_i;
+
+    correction[0] = Eigen::MatrixXf::Zero(h, w);
+    correction[1] = Eigen::MatrixXf::Zero(h, w);
+
+    for(int row = 0; row < h; row++)
+    {
+        for(int col = 0; col < w; col++)
+        {
+            float sx = (col - w / 2.0f) * step * P_px;
+            float sy = (row - h / 2.0f) * step * P_px;
+
+            float rx = sx * m1;
+            float ry = sy * m1;
+
+            float theta_x = atanf(rx / Z_a);
+            float theta_y = atanf(ry / Z_a);
+
+            float thetar_x = asinf(sinf(theta_x) / opticalparameters.n);
+            float thetar_y = asinf(sinf(theta_y) / opticalparameters.n);
+
+            float dx = sinf(theta_x - thetar_x) * t / cosf(thetar_x);
+            float dy = sinf(theta_y - thetar_y) * t / cosf(thetar_y);
+
+            float dsx = dx / sinf((std::numbers::pi / 2) - theta_x);
+            float dsy = dy / sinf((std::numbers::pi / 2) - theta_y);
+
+            correction[0](row, col) = dsx * z_i / (Z_B * P_px);
+            correction[1](row, col) = dsy * z_i / (Z_B * P_px);
+        }
+    }
+}
+
+void Session::ApplyRefractionCorrection()
+{
+    if(!n_correction || raw_piv_field.empty()) return;
+
+    ComputeRefractionCorrection(raw_piv_field[0].height, raw_piv_field[0].width);
+
+    for(auto& field : raw_piv_field)
+    {
+        field.u -= correction[0];
+        field.v -= correction[1];
+    }
 }
 
 void Session::ScaleFields()

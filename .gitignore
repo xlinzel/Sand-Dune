@@ -2,3 +2,6 @@ build/
 .vscode/
 csv/
 bos_pattern/
+
+# Doxygen generated output
+docs/output/
