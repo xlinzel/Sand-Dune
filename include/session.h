@@ -13,93 +13,189 @@
 #include <wind/opticalparameters.h>
 #include <wind/pivparameters.h>
 
-//https://pmc.ncbi.nlm.nih.gov/articles/PMC8747424/
+/// @brief References:
+/// - https://pmc.ncbi.nlm.nih.gov/articles/PMC8747424/
+/// - https://link.springer.com/article/10.1007/s00348-015-1927-5
+/// - https://link.springer.com/article/10.1007/s00348-005-0016-6
+/// - https://link.springer.com/article/10.1007/s00348-010-0985-y
 
-//https://link.springer.com/article/10.1007/s00348-015-1927-5
-//https://link.springer.com/article/10.1007/s00348-005-0016-6
-//https://link.springer.com/article/10.1007/s00348-010-0985-y
-
+/// @brief Processing state of an individual pipeline stage.
 enum StageState
 {
-    Idle,
-    Ready,
-    Busy,
-    Done,
-    Dirty
+    Idle,  ///< No data loaded; stage has never run.
+    Ready, ///< Input data available; stage has not yet run.
+    Busy,  ///< Stage is currently executing asynchronously.
+    Done,  ///< Stage completed successfully; results are available.
+    Dirty  ///< Results are stale because an upstream stage re-ran.
 };
 
+/// @brief Identifiers for the three main pipeline stages.
 enum Stages
 {
-    STAGE_PIV,
-    STAGE_VAL,
-    STAGE_RECON,
-    STAGE_TOTAL
+    STAGE_PIV,   ///< Cross-correlation (PIV) stage.
+    STAGE_VAL,   ///< Validation and outlier replacement stage.
+    STAGE_RECON, ///< Surface reconstruction (or thickness map in calibration mode).
+    STAGE_TOTAL  ///< Sentinel — total number of stages.
 };
 
+/// @brief Top-level controller for the BOS surface reconstruction pipeline.
+///
+/// Manages image loading, the three-stage processing pipeline (PIV → Validation → Reconstruction),
+/// refraction correction, result scaling, and async execution.  A single Session instance is
+/// shared between the UI and the compute back-end.
+///
+/// ### Normal mode (@p n_calibration = false)
+/// The pipeline produces refractive-index gradient maps (dn/dx, dn/dy) that are integrated
+/// by Frankot-Chellappa reconstruction into a surface height (dn) map.
+///
+/// ### Calibration mode (@p n_calibration = true)
+/// Refraction correction is skipped.  After validation the pipeline inverts the refraction
+/// geometry to estimate the physical sample thickness from the measured pixel displacements,
+/// enabling system calibration against a known reference sample.
 class Session
 {
 public:
     Session();
     ~Session();
 
+    // -------------------------------------------------------------------------
+    // @name Image loading
+    // -------------------------------------------------------------------------
+    ///@{
+
+    /// @brief Load the undisturbed reference background image.
+    /// @param path Absolute or relative path to the image file.
     void LoadRef(const std::string& path);
+
+    /// @brief Load one or more disturbed flow images for batch processing.
+    /// @param paths Ordered list of image file paths.
     void LoadFlow(const std::vector<std::string>& paths);
 
-    void RunPIV();
-    void RunValidation();
-    void RunReconstruction();
-    
-    bool IsRunning() const;
+    ///@}
 
-    void RunPIVAsync();
-    void RunValidationAsync();
-    void RunReconstructionAsync();
+    // -------------------------------------------------------------------------
+    /// @name Synchronous pipeline execution
+    // -------------------------------------------------------------------------
+    ///@{
+
+    /// @brief Run PIV cross-correlation on all loaded flow images (blocking).
+    void RunPIV();
+
+    /// @brief Run validation and outlier replacement on PIV results (blocking).
+    void RunValidation();
+
+    /// @brief Run surface reconstruction or thickness-map computation (blocking).
+    ///
+    /// In normal mode calls Reconstruction::Compute() followed by ScaleFields().
+    /// In calibration mode (@p n_calibration = true) calls ComputeThicknessMap().
+    void RunReconstruction();
+
+    ///@}
+
+    // -------------------------------------------------------------------------
+    /// @name Asynchronous pipeline execution
+    // -------------------------------------------------------------------------
+    ///@{
+
+    void RunPIVAsync();           ///< Launch RunPIV() on a background thread.
+    void RunValidationAsync();    ///< Launch RunValidation() on a background thread.
+    void RunReconstructionAsync();///< Launch RunReconstruction() on a background thread.
+
+    /// @brief Run the complete pipeline (PIV → Validation → Reconstruction) on a background thread.
     void RunAllAsync();
 
+    /// @brief Returns true while any pipeline stage is executing asynchronously.
+    bool IsRunning() const;
+
+    ///@}
+
+    // -------------------------------------------------------------------------
+    /// @name Scaling
+    // -------------------------------------------------------------------------
+    ///@{
+
+    /// @brief Convert raw pixel displacements to physical units (dn or mm) using the optical parameters.
+    ///
+    /// In normal mode scales PIV/val fields and the reconstructed surface.
+    /// In calibration mode (@p n_calibration = true) the PIV/val fields are left in pixels
+    /// and the surface is already in mm, so this call is a no-op for those outputs.
     void ScaleFields();
 
-    bool IsSaving() const;
+    ///@}
+
+    // -------------------------------------------------------------------------
+    /// @name Saving
+    // -------------------------------------------------------------------------
+    ///@{
+
+    bool IsSaving() const; ///< Returns true while an async save is in progress.
+
+    /// @brief Save all results asynchronously to the given base path.
     void SaveAsync(const std::string& base_path);
 
-    void SavePIVCSV(const std::string& base_path);
-    void SaveValCSV(const std::string& base_path);
-    void SaveSurfaceCSV(const std::string& base_path);
+    void SavePIVCSV(const std::string& base_path);     ///< Write scaled PIV fields to CSV.
+    void SaveValCSV(const std::string& base_path);     ///< Write validated fields to CSV.
+    void SaveSurfaceCSV(const std::string& base_path); ///< Write the surface / thickness map to CSV.
 
-    const Image& GetRef() const;
-    const Image& GetFlow() const;
-    
-    const std::string& GetRefPath() const;
-    const std::string& GetFlowPath() const;
+    ///@}
 
-    void SetActiveIndex(int i);
-    int GetActiveIndex() const;
+    // -------------------------------------------------------------------------
+    /// @name Data accessors
+    // -------------------------------------------------------------------------
+    ///@{
 
-    bool HasFlow() const;
-    int GetFlowCount() const;
+    const Image& GetRef()  const; ///< Currently loaded reference image.
+    const Image& GetFlow() const; ///< Flow image at the active batch index.
+
+    const std::string& GetRefPath()  const; ///< File path of the reference image.
+    const std::string& GetFlowPath() const; ///< File path of the active flow image.
+
+    void SetActiveIndex(int i); ///< Select which batch frame to display.
+    int  GetActiveIndex() const;
+
+    bool HasFlow() const;  ///< Returns true if at least one flow image is loaded.
+    int  GetFlowCount() const; ///< Number of loaded flow images.
     const std::vector<std::string>& GetFlowPaths() const;
 
-    const VectorField& GetPIVField() const;
-    const VectorField& GetValField() const;
-    const Eigen::MatrixXf& GetSurface() const;
+    const VectorField&    GetPIVField()  const; ///< Scaled PIV field for the active frame.
+    const VectorField&    GetValField()  const; ///< Validated field for the active frame.
+    const Eigen::MatrixXf& GetSurface() const; ///< Reconstructed surface or thickness map for the active frame.
+
+    /// @brief Query the current state of a pipeline stage.
     StageState GetStageState(Stages s) const;
-    //Mask open variables
-    int posx = 0, posy = 0;
-    int radius = 1000;
-    float a = 0.1f;
-    bool mask_apply = true;
 
-    PIVParameters pivparameters;
-    OpticalParameters opticalparameters;
-    
-    //Progress tracking
-    std::atomic<float> progress{0.0f};
-    std::chrono::steady_clock::time_point task_start;
+    ///@}
 
-    //Refraction correction
-    bool n_correction = true;
+    // -------------------------------------------------------------------------
+    /// @name Mask parameters (set directly by the UI)
+    // -------------------------------------------------------------------------
+    ///@{
+    int   posx = 0,    posy = 0; ///< Mask centre in field coordinates (col, row).
+    int   radius = 1000;         ///< Mask radius in field units.
+    float a = 0.1f;              ///< Tukey roll-off parameter [0, 1].
+    bool  mask_apply = true;     ///< Apply the mask to reconstruction outputs when true.
+    ///@}
 
-    //Refractive index/thickness toggle
-    bool b_ref = true;
+    PIVParameters     pivparameters;    ///< Window size, overlap, and search size for PIV.
+    OpticalParameters opticalparameters;///< Camera geometry and sample properties.
+
+    // -------------------------------------------------------------------------
+    /// @name Progress and timing
+    // -------------------------------------------------------------------------
+    ///@{
+    std::atomic<float> progress{0.0f};               ///< Pipeline progress in [0, 1], updated during async runs.
+    std::chrono::steady_clock::time_point task_start; ///< Wall-clock time when the current async task began.
+    ///@}
+
+    // -------------------------------------------------------------------------
+    /// @name Processing flags
+    // -------------------------------------------------------------------------
+    ///@{
+    bool n_correction  = true;  ///< Apply refraction correction to PIV results (normal mode only).
+    bool n_calibration = false; ///< Calibration mode: invert refraction to estimate sample thickness.
+    bool b_ref         = true;  ///< Show refractive-index units (dn) when true; thickness (mm) when false.
+    ///@}
+
 private:
     std::string ref_path;
     std::vector<std::string> flow_paths;
@@ -108,24 +204,43 @@ private:
     std::vector<Image> flows;
     Mask mask;
 
+    // -------------------------------------------------------------------------
+    /// @name Refraction correction
+    // -------------------------------------------------------------------------
+    ///@{
+
+    /// @brief Pre-compute the per-pixel refraction correction matrices for a field of size h × w.
+    ///
+    /// Calculates the lateral ray displacement caused by refraction through a sample of known
+    /// thickness (@p OpticalParameters::t) and refractive index (@p OpticalParameters::n).
     void ComputeRefractionCorrection(int h, int w);
+
+    /// @brief Subtract the pre-computed correction matrices from all raw_piv_field entries.
     void ApplyRefractionCorrection();
 
-    std::vector<VectorField> raw_piv_field;
-    std::vector<VectorField> piv_field;
-    Eigen::MatrixXf correction[2];
-    
-    std::vector<VectorField> raw_val_field;
-    std::vector<VectorField> val_field;
+    /// @brief Invert the refraction geometry to estimate sample thickness from validated displacements.
+    ///
+    /// Used in calibration mode (@p n_calibration = true).  Results are stored in raw_surface
+    /// and surface in millimetres.
+    void ComputeThicknessMap();
 
-    std::vector<Eigen::MatrixXf> raw_surface;
-    std::vector<Eigen::MatrixXf> surface;
+    ///@}
+
+    std::vector<VectorField> raw_piv_field; ///< Per-frame PIV fields before refraction correction.
+    std::vector<VectorField> piv_field;     ///< Per-frame PIV fields after correction and scaling.
+    Eigen::MatrixXf correction[2];          ///< Refraction correction matrices for u [0] and v [1].
+
+    std::vector<VectorField> raw_val_field; ///< Per-frame validated fields before scaling.
+    std::vector<VectorField> val_field;     ///< Per-frame validated fields after scaling.
+
+    std::vector<Eigen::MatrixXf> raw_surface; ///< Per-frame surfaces before scaling (metres in calibration mode).
+    std::vector<Eigen::MatrixXf> surface;     ///< Per-frame surfaces in final display units (dn or mm).
 
     int active_index = 0;
 
     StageState stagestates[STAGE_TOTAL];
 
-    //Async
+    // Async
     std::atomic<bool> stop_requested{false};
     std::future<void> activetask;
     std::future<void> save_task;

@@ -65,7 +65,7 @@ void Session::RunPIV()
     for(int i = 0; i < (int)flows.size(); i++)
         raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat());
 
-    ApplyRefractionCorrection();
+    if(!n_calibration) ApplyRefractionCorrection();
     ScaleFields();
 
     stagestates[STAGE_PIV] = Done;
@@ -96,16 +96,21 @@ void Session::RunReconstruction()
     if(stagestates[STAGE_RECON] == Idle)
         return;
 
-    Reconstruction recon;
-    raw_surface.resize(raw_val_field.size());
-    surface.resize(raw_val_field.size());
-
-    for(int i = 0; i < (int)raw_val_field.size(); i++)
+    if(n_calibration)
     {
-        raw_surface[i] = recon.Compute(raw_val_field[i]);
+        ComputeThicknessMap();
     }
+    else
+    {
+        Reconstruction recon;
+        raw_surface.resize(raw_val_field.size());
+        surface.resize(raw_val_field.size());
 
-    ScaleFields();
+        for(int i = 0; i < (int)raw_val_field.size(); i++)
+            raw_surface[i] = recon.Compute(raw_val_field[i]);
+
+        ScaleFields();
+    }
 
     stagestates[STAGE_RECON] = Done;
 }
@@ -142,7 +147,7 @@ void Session::RunPIVAsync()
 
         if(stop_requested) return;
 
-        ApplyRefractionCorrection();
+        if(!n_calibration) ApplyRefractionCorrection();
         ScaleFields();
 
         stagestates[STAGE_PIV] = Done;
@@ -197,34 +202,37 @@ void Session::RunReconstructionAsync()
                 {posx / step, posy / step}, radius / step);
         }
 
-        Reconstruction recon;
-        int n = (int)raw_val_field.size();
-        raw_surface.resize(n);
-
-        for(int i = 0; i < n; i++)
+        if(n_calibration)
         {
-            if(mask_apply)
-            {
-                VectorField temp = raw_val_field[i];
-                temp.u = mask.ApplyMask(temp.u);
-                temp.v = mask.ApplyMask(temp.v);
-                raw_surface[i] = recon.Compute(temp);
-            }
-            else
-                raw_surface[i] = recon.Compute(raw_val_field[i]);
-
-            progress = (float)(i + 1) / n;
+            ComputeThicknessMap();
         }
+        else
+        {
+            Reconstruction recon;
+            int n = (int)raw_val_field.size();
+            raw_surface.resize(n);
 
-        ScaleFields();
+            for(int i = 0; i < n; i++)
+            {
+                if(mask_apply)
+                {
+                    VectorField temp = raw_val_field[i];
+                    temp.u = mask.ApplyMask(temp.u);
+                    temp.v = mask.ApplyMask(temp.v);
+                    raw_surface[i] = recon.Compute(temp);
+                }
+                else
+                    raw_surface[i] = recon.Compute(raw_val_field[i]);
+
+                progress = (float)(i + 1) / n;
+            }
+
+            ScaleFields();
+        }
 
         stagestates[STAGE_RECON] = Done;
     });
-
-    return;
 }
-
-
 
 void Session::RunAllAsync()
 {
@@ -253,7 +261,7 @@ void Session::RunAllAsync()
         }
 
         if(stop_requested) return;
-        ApplyRefractionCorrection();
+        if(!n_calibration) ApplyRefractionCorrection();
         ScaleFields();
         stagestates[STAGE_PIV] = Done;
         stagestates[STAGE_VAL] = Busy;
@@ -280,25 +288,35 @@ void Session::RunAllAsync()
                 {posx / step, posy / step}, radius / step);
         }
 
-        Reconstruction recon;
-        raw_surface.resize(n);
-        for(int i = 0; i < n && !stop_requested; i++)
-        {
-            if(mask_apply)
-            {
-                VectorField temp = raw_val_field[i];
-                temp.u = mask.ApplyMask(temp.u);
-                temp.v = mask.ApplyMask(temp.v);
-                raw_surface[i] = recon.Compute(temp);
-            }
-            else
-                raw_surface[i] = recon.Compute(raw_val_field[i]);
+        if(stop_requested) return;
 
-            progress = (float)(i + 1) / n;
+        if(n_calibration)
+        {
+            ComputeThicknessMap();
+        }
+        else
+        {
+            Reconstruction recon;
+            raw_surface.resize(n);
+            for(int i = 0; i < n && !stop_requested; i++)
+            {
+                if(mask_apply)
+                {
+                    VectorField temp = raw_val_field[i];
+                    temp.u = mask.ApplyMask(temp.u);
+                    temp.v = mask.ApplyMask(temp.v);
+                    raw_surface[i] = recon.Compute(temp);
+                }
+                else
+                    raw_surface[i] = recon.Compute(raw_val_field[i]);
+
+                progress = (float)(i + 1) / n;
+            }
+
+            if(stop_requested) return;
+            ScaleFields();
         }
 
-        if(stop_requested) return;
-        ScaleFields();
         stagestates[STAGE_RECON] = Done;
     });
 }
@@ -359,6 +377,93 @@ void Session::ApplyRefractionCorrection()
     }
 }
 
+void Session::ComputeThicknessMap()
+{
+    if(raw_val_field.empty()) return;
+
+    float f    = opticalparameters.f    * 1e-3f;
+    float Z_a  = opticalparameters.Z_a  * 1e-3f;
+    float Z_d  = opticalparameters.Z_d  * 1e-3f;
+    float P_px = opticalparameters.P_px * 1e-6f;
+    float Z_B  = Z_a + Z_d;
+    float z_i  = f * Z_B / (Z_B - f);
+    int   step = pivparameters.window_size - pivparameters.overlap;
+    float m1   = Z_a / z_i;
+    float n    = opticalparameters.n;
+
+    constexpr float angle_threshold = 0.5f * std::numbers::pi_v<float> / 180.0f; // 0.5 degrees
+
+    int n_frames = (int)raw_val_field.size();
+    raw_surface.resize(n_frames);
+    surface.resize(n_frames);
+
+    for(int fi = 0; fi < n_frames; fi++)
+    {
+        
+        //Mean Subtraction (account for tilt) ------------------------------------------------------------
+        //Could remove real gradient data from large refractive index migration in material
+        auto nonzero_u = (raw_val_field[fi].u.array() != 0.0f);
+        float mean_u = nonzero_u.select(raw_val_field[fi].u.array(), 0.0f).sum() / nonzero_u.count();
+
+        auto nonzero_v = (raw_val_field[fi].v.array() != 0.0f);
+        float mean_v = nonzero_v.select(raw_val_field[fi].v.array(), 0.0f).sum() / nonzero_v.count();
+
+        Eigen::MatrixXf u_cent = nonzero_u.select(raw_val_field[fi].u.array() - mean_u, 0.0f);
+        Eigen::MatrixXf v_cent = nonzero_v.select(raw_val_field[fi].v.array() - mean_v, 0.0f);
+
+        //-----------------------------------------------
+        
+        int h = raw_val_field[fi].height;
+        int w = raw_val_field[fi].width;
+
+        raw_surface[fi] = Eigen::MatrixXf::Zero(h, w);
+
+        for(int row = 0; row < h; row++)
+        {
+            for(int col = 0; col < w; col++)
+            {
+                float sx = (col - w / 2.0f) * step * P_px;
+                float sy = (row - h / 2.0f) * step * P_px;
+
+                float theta_x  = atanf(sx * m1 / Z_a);
+                float theta_y  = atanf(sy * m1 / Z_a);
+                float thetar_x = asinf(sinf(theta_x) / n);
+                float thetar_y = asinf(sinf(theta_y) / n);
+
+                float sin_diff_x = sinf(theta_x - thetar_x);
+                float sin_diff_y = sinf(theta_y - thetar_y);
+
+                float dsx = u_cent(row, col) * Z_B * P_px / z_i;
+                float dx  = dsx * cosf(theta_x);
+                
+                float dsy = v_cent(row, col) * Z_B * P_px / z_i;
+                float dy  = dsy * cosf(theta_y);
+
+                bool valid_x = std::abs(theta_x) >= angle_threshold;
+                bool valid_y = std::abs(theta_y) >= angle_threshold;
+
+                if(valid_x && valid_y)
+                    raw_surface[fi](row, col) = 0.5f * (dx * cosf(thetar_x) / sin_diff_x
+                                                       + dy * cosf(thetar_y) / sin_diff_y);
+                else if(valid_x)
+                    raw_surface[fi](row, col) = dx * cosf(thetar_x) / sin_diff_x;
+                else if(valid_y)
+                    raw_surface[fi](row, col) = dy * cosf(thetar_y) / sin_diff_y;
+                else
+                    raw_surface[fi](row, col) = 0.0f;
+
+                // Convert meters -> mm
+                raw_surface[fi](row, col) *= 1e3f;
+            }
+        }
+
+        if(mask_apply)
+            raw_surface[fi] = mask.ApplyMask(raw_surface[fi]);
+
+        surface[fi] = raw_surface[fi];
+    }
+}
+
 void Session::ScaleFields()
 {
     // Clamp parameters to physically valid minimums to prevent division by zero
@@ -373,15 +478,21 @@ void Session::ScaleFields()
     float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
     float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
 
-    float term = b_ref 
-                    ? opticalparameters.t                          // RI mode: divide by thickness
-                    : (opticalparameters.n - 1.0f);               // thickness mode: divide by (n-1)
-    term = std::max(term, 0.001f);
+    // In calibration mode PIV/val are kept as raw pixels; surface is computed
+    // directly in mm by ComputeThicknessMap() and needs no further scaling.
+    float scale = 1.0f;
+    if(!n_calibration)
+    {
+        float term = b_ref
+                        ? opticalparameters.t                   // RI mode: divide by thickness
+                        : (opticalparameters.n - 1.0f);         // thickness mode: divide by (n-1)
+        term = std::max(term, 0.001f);
 
-    int step = pivparameters.window_size - pivparameters.overlap;
-    float scale = (float)step * opticalparameters.P_px * 1e-3
+        int step = pivparameters.window_size - pivparameters.overlap;
+        scale = (float)step * opticalparameters.P_px * 1e-3
                 * (Z_B - opticalparameters.f)
                 / (opticalparameters.f * opticalparameters.Z_d * term);
+    }
 
     if(stagestates[STAGE_PIV] != Idle && stagestates[STAGE_PIV] != Ready)
     {
@@ -409,7 +520,7 @@ void Session::ScaleFields()
         }
     }
 
-    if(stagestates[STAGE_RECON] != Idle && stagestates[STAGE_RECON] != Ready)
+    if(!n_calibration && stagestates[STAGE_RECON] != Idle && stagestates[STAGE_RECON] != Ready)
     {
         surface.resize(raw_surface.size());
         for(int i = 0; i < (int)raw_surface.size(); i++)

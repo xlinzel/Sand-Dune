@@ -1,20 +1,24 @@
 #pragma once
 
-
+/// @brief Physical parameters describing the BOS optical setup.
+///
+/// All distances are in millimetres and the pixel pitch is in micrometres,
+/// matching the unit conventions used throughout the UI and in ScaleFields().
 struct OpticalParameters
 {
-    //RI Calculation parameters
-    float t = 1.0f; // sample thickeness (mm)
-    float n = 1.45f; //refractive index (for thickness measumrents)
+    // --- Sample properties ---
+    float t   = 1.0f;   ///< Known sample thickness used for refraction correction (mm).
+    float n   = 1.45f;  ///< Refractive index of the sample (used for both correction and calibration).
 
-    float P_px = 2.315f; //camera sensor pixel pitch (um)
+    // --- Camera / lens ---
+    float P_px = 2.315f; ///< Sensor pixel pitch (µm).
+    float f    = 25.0f;  ///< Lens focal length (mm).
 
-    float Z_d = 218.0f; //background - sample (mm)
-    float Z_a = 58.0f; //sample - lens (mm)
-    float f = 25.0f; //lens focal length (mm)
+    // --- Setup geometry ---
+    float Z_d = 220.0f; ///< Distance from background dot pattern to the sample (mm).
+    float Z_a = 54.5f;  ///< Distance from the sample to the lens front principal plane (mm).
 
-    //Setup sensitivity and resolutoion calculations
-    float d_a = 10.5f; //aperture diameter (mm)
-
-    float d_bg = 0.1f; //background dot diameter (mm)
+    // --- Sensitivity / resolution helpers ---
+    float d_a  = 10.5f; ///< Lens aperture diameter (mm). Used for depth-of-field estimates.
+    float d_bg = 0.1f;  ///< Background dot diameter (mm). Used for resolution estimates.
 };

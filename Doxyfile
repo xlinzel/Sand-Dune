@@ -49,7 +49,7 @@ HTML_COLORSTYLE        = LIGHT
 #---------------------------------------------------------------------------
 
 GENERATE_TREEVIEW      = YES
-PAGE_OUTLINE_PANEL     = YES
+PAGE_OUTLINE_PANEL     = NO
 DISABLE_INDEX          = NO
 FULL_SIDEBAR           = NO
 

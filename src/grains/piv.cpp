@@ -159,6 +159,10 @@ Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, con
     Eigen::MatrixXf ref_hann = w_refpad.array() * hann2d.array();
     Eigen::MatrixXf flow_hann = w_flow.array() * hann2d.array();
 
+    //Mean subtration for DC Offset Mitigation
+    ref_hann.array() -= ref_hann.mean();
+    flow_hann.array() -= flow_hann.mean();
+
     //Copy data into a row major matrix for more efficient FFT buffer filling
         //FFT uses row major storage, Eigen by default uses collumn major
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> ref_rm = ref_hann;
@@ -283,12 +287,15 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap)
         return PeakResult{float(col - ccmap.cols()/2), float(row - ccmap.rows()/2), sig2noise};
     }
 
-    //Gaussian Interpolation
+    //Gaussian Interpolation (issue with peak locking which is heavily researched): https://iopscience.iop.org/article/10.1088/0957-0233/27/10/104005
+    //  Can cause a dragon scale pattern
     float x_interp = col + (std::log(ccmap(row, col - 1)) - std::log(ccmap(row, col + 1)))
                             / (2 * std::log(ccmap(row, col - 1)) - 4 * std::log(ccmap(row, col)) + 2 * std::log(ccmap(row, col + 1)));
 
     float y_interp = row + (std::log(ccmap(row - 1, col)) - std::log(ccmap(row + 1, col)))
                             / (2 * std::log(ccmap(row - 1, col)) - 4 * std::log(ccmap(row, col)) + 2 * std::log(ccmap(row + 1, col)));
+
+
 
     float u = x_interp - ccmap.cols() / 2;
     float v = y_interp - ccmap.rows() / 2;

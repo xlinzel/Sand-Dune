@@ -211,6 +211,10 @@ void UI::DrawParametersPanel()
     if(ImGui::RadioButton("RI Variation (uniform t)",       session.b_ref == true))  session.b_ref = true;
     if(ImGui::RadioButton("Thickness Variation (uniform n)", session.b_ref == false)) session.b_ref = false;
 
+    ImGui::Checkbox("Field Correction", &session.n_correction);
+    ImGui::SameLine(180.0f);
+    ImGui::Checkbox("Calibration Field", &session.n_calibration);
+
     ImGui::PushItemWidth(-230.0f);
     
     params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
@@ -621,25 +625,26 @@ void UI::DrawPIV()
     if(ImPlot::BeginPlot("##pivresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
     {
         ImPlot::SetupAxes("x (mm)", "y (mm)");
-        ImPlot::SetupAxesLimits(0, field_w_mm, 0, field_h_mm, ImGuiCond_Once);
-        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, field_w_mm);
-        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, field_h_mm);
+        ImPlot::SetupAxesLimits(-field_w_mm/2, field_w_mm/2, -field_h_mm/2, field_h_mm/2, ImGuiCond_Once);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, -field_w_mm/2, field_w_mm/2);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -field_h_mm/2, field_h_mm/2);
 
         if(ImPlot::IsPlotHovered())
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-            int col = (int)(mouse.x / px_to_mm);
-            int row = field.height - 1 - (int)(mouse.y / px_to_mm); // flip: plot y is bottom-up, matrix row is top-down
+            int col = (int)((mouse.x + field_w_mm/2) / px_to_mm);
+            int row = field.height - 1 - (int)((mouse.y + field_h_mm/2) / px_to_mm); // flip: plot y is bottom-up, matrix row is top-down
             const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
-                const char* unit = (piv_map == 0) ? " dn/du" : (piv_map == 1) ? " dn/dv" : "";
+                const char* unit = session.n_calibration ? " px"
+                                 : (piv_map == 0) ? " dn/du" : (piv_map == 1) ? " dn/dv" : "";
                 ImGui::SetTooltip("%.4f%s", (*maps[piv_map])(row, col), unit);
             }
         }
 
         ImPlot::PlotImage("##heatmap", (ImTextureID)piv_textures[piv_map],
-                          ImPlotPoint(0, 0), ImPlotPoint(field_w_mm, field_h_mm));
+                          ImPlotPoint(-field_w_mm/2, -field_h_mm/2), ImPlotPoint(field_w_mm/2, field_h_mm/2));
         ImPlot::EndPlot();
     }
 
@@ -657,8 +662,10 @@ void UI::DrawPIV()
         const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
         float data_min = maps[piv_map]->minCoeff();
         float data_max = maps[piv_map]->maxCoeff();
+        if(!std::isfinite(data_min)) data_min = 0.0f;
+        if(!std::isfinite(data_max)) data_max = 1.0f;
         float step = (data_max - data_min) / 200.0f;
-        int decimals = std::max(0, (int)std::ceil(-std::log10(step)));
+        int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];
         snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
         ImGui::SetNextItemWidth(half_w);
@@ -776,25 +783,26 @@ void UI::DrawVal()
     if(ImPlot::BeginPlot("##valresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
     {
         ImPlot::SetupAxes("x (mm)", "y (mm)");
-        ImPlot::SetupAxesLimits(0, field_w_mm, 0, field_h_mm, ImGuiCond_Once);
-        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, field_w_mm);
-        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, field_h_mm);
+        ImPlot::SetupAxesLimits(-field_w_mm/2, field_w_mm/2, -field_h_mm/2, field_h_mm/2, ImGuiCond_Once);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, -field_w_mm/2, field_w_mm/2);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -field_h_mm/2, field_h_mm/2);
 
         if(ImPlot::IsPlotHovered())
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-            int col = (int)(mouse.x / px_to_mm);
-            int row = field.height - 1 - (int)(mouse.y / px_to_mm);
+            int col = (int)((mouse.x + field_w_mm/2) / px_to_mm);
+            int row = field.height - 1 - (int)((mouse.y + field_h_mm/2) / px_to_mm);
             const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
-                const char* unit = (val_map == 0) ? " dn/du" : (val_map == 1) ? " dn/dv" : "";
+                const char* unit = session.n_calibration ? " px"
+                                 : (val_map == 0) ? " dn/du" : (val_map == 1) ? " dn/dv" : "";
                 ImGui::SetTooltip("%.4f%s", (*maps[val_map])(row, col), unit);
             }
         }
 
         ImPlot::PlotImage("##heatmap", (ImTextureID)val_textures[val_map],
-                          ImPlotPoint(0, 0), ImPlotPoint(field_w_mm, field_h_mm));
+                          ImPlotPoint(-field_w_mm/2, -field_h_mm/2), ImPlotPoint(field_w_mm/2, field_h_mm/2));
         ImPlot::EndPlot();
     }
 
@@ -812,8 +820,10 @@ void UI::DrawVal()
         const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
         float data_min = maps[val_map]->minCoeff();
         float data_max = maps[val_map]->maxCoeff();
+        if(!std::isfinite(data_min)) data_min = 0.0f;
+        if(!std::isfinite(data_max)) data_max = 1.0f;
         float step = (data_max - data_min) / 200.0f;
-        int decimals = std::max(0, (int)std::ceil(-std::log10(step)));
+        int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];
         snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
         ImGui::SetNextItemWidth(half_w);
@@ -909,28 +919,28 @@ void UI::DrawSurf()
     float plot_h     = std::min(avail_h, avail_w * ratio);
     float plot_w     = plot_h / ratio;
 
-    const char* units     = session.b_ref ? "dn"  : "mm";
-    const char* scale_lbl = session.b_ref ? "dn"  : "t (mm)";
+    const char* units     = session.n_calibration ? "mm"      : session.b_ref ? "dn" : "mm";
+    const char* scale_lbl = session.n_calibration ? "t (mm)"  : session.b_ref ? "dn" : "t (mm)";
 
     // --- Surface plot ---
     if(ImPlot::BeginPlot("##surfplot", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
     {
         ImPlot::SetupAxes("x (mm)", "y (mm)");
-        ImPlot::SetupAxesLimits(0, field_w_mm, 0, field_h_mm, ImGuiCond_Once);
-        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, field_w_mm);
-        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, field_h_mm);
+        ImPlot::SetupAxesLimits(-field_w_mm/2, field_w_mm/2, -field_h_mm/2, field_h_mm/2, ImGuiCond_Once);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, -field_w_mm/2, field_w_mm/2);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -field_h_mm/2, field_h_mm/2);
 
         if(ImPlot::IsPlotHovered())
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-            int col = (int)(mouse.x / px_to_mm);
-            int row = (int)surface.rows() - 1 - (int)(mouse.y / px_to_mm);
+            int col = (int)((mouse.x + field_w_mm/2) / px_to_mm);
+            int row = (int)surface.rows() - 1 - (int)((mouse.y + field_h_mm/2) / px_to_mm);
             if(col >= 0 && col < surface.cols() && row >= 0 && row < surface.rows())
                 ImGui::SetTooltip("%.4f %s", surface(row, col), units);
         }
 
         ImPlot::PlotImage("##surfimage", (ImTextureID)surf_texture,
-                          ImPlotPoint(0, 0), ImPlotPoint(field_w_mm, field_h_mm));
+                          ImPlotPoint(-field_w_mm/2, -field_h_mm/2), ImPlotPoint(field_w_mm/2, field_h_mm/2));
         ImPlot::EndPlot();
     }
 
@@ -947,8 +957,10 @@ void UI::DrawSurf()
     {
         float data_min = surface.minCoeff();
         float data_max = surface.maxCoeff();
+        if(!std::isfinite(data_min)) data_min = 0.0f;
+        if(!std::isfinite(data_max)) data_max = 1.0f;
         float step = (data_max - data_min) / 200.0f;
-        int decimals = std::max(0, (int)std::ceil(-std::log10(step)));
+        int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];
         snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
         ImGui::SetNextItemWidth(half_w);
