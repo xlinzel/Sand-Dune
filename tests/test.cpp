@@ -79,8 +79,10 @@ TEST_CASE("PIV Computation")
         std::cout << "U vector maxcoeff: " << result.u.cwiseAbs().maxCoeff() << std::endl;
         std::cout << "V vector maxcoeff: " << result.v.cwiseAbs().maxCoeff() << std::endl;
 
-        CHECK(result.u.cwiseAbs().maxCoeff() < 1.0f);
-        CHECK(result.v.cwiseAbs().maxCoeff() < 1.0f);
+        CHECK(result.u.cwiseAbs().maxCoeff() < 0.15f);
+        CHECK(result.v.cwiseAbs().maxCoeff() < 0.15f);
+        CHECK(std::abs(result.u.mean()) < 0.05f);
+        CHECK(std::abs(result.v.mean()) < 0.05f);
     }
 
     SUBCASE("Known Displacement")

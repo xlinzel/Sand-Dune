@@ -365,7 +365,7 @@ void UI::DrawPipelinePanel()
     {
         float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
         ImGui::ProgressBar(p, ImVec2(-1, 0));
-        if(p > 0.02f)
+        if(p > 0.0005f)
         {
             float elapsed = std::chrono::duration<float>(
                 std::chrono::steady_clock::now() - session.task_start).count();

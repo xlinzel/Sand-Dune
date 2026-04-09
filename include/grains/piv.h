@@ -83,5 +83,6 @@ private:
     Eigen::MatrixXf CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow);
 
     /// @brief Locate the cross-correlation peak and compute sub-pixel position and S2N.
-    PeakResult FindPeak(const Eigen::MatrixXf& ccmap);
+    PeakResult FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow,
+                        double& t_patch, double& t_phi, double& t_R, double& t_gamma, double& t_nr);
 };
