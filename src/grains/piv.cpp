@@ -30,9 +30,9 @@ PIV::~PIV()
 void PIV::AllocateFFTBuffers()
 {
     //Rows and collumns are the same here, but may be different at somepoint who know, jsut for cflarity they are speerate variables
-    rows = search_size;
-    cols = search_size;
-    freq_cols = (floor(search_size / 2) + 1);
+    rows = window_size;
+    cols = window_size;
+    freq_cols = (floor(window_size / 2) + 1);
 
     ref_in = (float*) fftwf_alloc_real(rows * cols);
     flow_in = (float*) fftwf_alloc_real(rows * cols);
@@ -80,7 +80,6 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
         return VectorField();
     }
 
-    int margin = (search_size - window_size) / 2;
     int movement = window_size - overlap;
 
     int total_windows = floor(ref_size(0) / movement) * floor(ref_size(1) / movement);
@@ -108,31 +107,17 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
                 std::min(window_size, ref_size(0) - win_row * movement),
                 std::min(window_size, ref_size(1) - win_col * movement));
 
-            Eigen::MatrixXf w_flow = Eigen::MatrixXf::Zero(search_size, search_size);
+            Eigen::MatrixXf w_flow = Eigen::MatrixXf::Zero(window_size, window_size);
 
             w_flow.block(
-                std::max(0, margin - win_row * movement),
-                std::max(0, margin - win_col * movement),
-                std::min(search_size - std::max(0, margin - win_row * movement), ref_size(0) - std::max(0, win_row * movement - margin)),
-                std::min(search_size - std::max(0, margin - win_col * movement), ref_size(1) - std::max(0, win_col * movement - margin)))
+                0, 0,
+                std::min(window_size, ref_size(0) - win_row * movement),
+                std::min(window_size, ref_size(1) - win_col * movement))
             
             = flow.block(
-                std::max(0, win_row * movement - margin),
-                std::max(0, win_col * movement - margin),
-                std::min(search_size - std::max(0, margin - win_row * movement), ref_size(0) - std::max(0, win_row * movement - margin)),
-                std::min(search_size - std::max(0, margin - win_col * movement), ref_size(1) - std::max(0, win_col * movement - margin)));
-            
-            //Check total variance of the reference window, if it is below 0.1%, assume there is essentially nothign there
-                //May need to test teh percent here.
-            float mean = w_reference.mean();
-            float variance = (w_reference.array() - mean).square().sum() / (window_size * window_size);
-            if(variance < 0.001f)
-            {
-                vectorfield.u(win_row, win_col) = 0.0f;
-                vectorfield.v(win_row, win_col) = 0.0f;
-                vectorfield.s2n(win_row, win_col) = 0.0f;
-                continue;
-            }
+                win_row * movement, win_col * movement,
+                std::min(window_size, ref_size(0) - win_row * movement),
+                std::min(window_size, ref_size(1) - win_col * movement));
 
             Eigen::MatrixXf ccmap = CrossCorrelationFFT(w_reference, w_flow);
 
@@ -162,32 +147,18 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
 
 Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow)
 {
-    Eigen::Vector2i ref_size(w_reference.rows(), w_reference.cols());
-    Eigen::Vector2i flow_size(w_flow.rows(), w_flow.cols());
-
-    //Zero pad reference frame to match flow frame (reduces circular artifacting)
-    Eigen::MatrixXf w_refpad = Eigen::MatrixXf::Zero(w_flow.rows(), w_flow.cols());
-    w_refpad.block(
-        (flow_size(0) - ref_size(0)) / 2, 
-        (flow_size(1) - ref_size(1)) / 2,
-        ref_size(0), ref_size(1))
-    = w_reference;
-    
-    //Apply Hann Window
-    Eigen::MatrixXf ref_hann = w_refpad.array() * hann2d.array();
-    Eigen::MatrixXf flow_hann = w_flow.array() * hann2d.array();
-
-    //Mean subtration for DC Offset Mitigation
-    ref_hann.array() -= ref_hann.mean();
-    flow_hann.array() -= flow_hann.mean();
+    Eigen::Vector2i size(w_reference.rows(), w_reference.cols());
 
     //Copy data into a row major matrix for more efficient FFT buffer filling
         //FFT uses row major storage, Eigen by default uses collumn major
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> ref_rm = ref_hann;
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> flow_rm = flow_hann;
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> ref_rm = w_reference;
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> flow_rm = w_flow;
 
-    memcpy(ref_in, ref_rm.data(), sizeof(float) * flow_size(0) * flow_size(1));
-    memcpy(flow_in, flow_rm.data(), sizeof(float) * flow_size(0) * flow_size(1));
+    ref_rm.array() -= ref_rm.mean();
+    flow_rm.array() -= flow_rm.mean();
+
+    memcpy(ref_in, ref_rm.data(), sizeof(float) * size(0) * size(1));
+    memcpy(flow_in, flow_rm.data(), sizeof(float) * size(0) * size(1));
 
     //Execute FFT
     fftwf_execute(ref_plan);

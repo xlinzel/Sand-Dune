@@ -191,7 +191,6 @@ void UI::DrawParametersPanel()
 
     ImGui::SliderInt("Window Size", &session.pivparameters.window_size, 0, 164);
     ImGui::SliderInt("Overlap", &session.pivparameters.overlap, 0, session.pivparameters.window_size - 2);
-    ImGui::SliderInt("Search Size", &session.pivparameters.search_size, 0, 196);
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Experimental Parameters");
@@ -580,6 +579,7 @@ void UI::DrawPIV()
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
+    static float data_min_cache[3] = {0,0,0}, data_max_cache[3] = {1,1,1};
     if(piv_textures[0] == nullptr)
     {
         // Auto-range all three maps on first build
@@ -588,6 +588,8 @@ void UI::DrawPIV()
         {
             piv_cmap_min[i] = maps[i]->minCoeff();
             piv_cmap_max[i] = maps[i]->maxCoeff();
+            data_min_cache[i] = std::isfinite(piv_cmap_min[i]) ? piv_cmap_min[i] : 0.0f;
+            data_max_cache[i] = std::isfinite(piv_cmap_max[i]) ? piv_cmap_max[i] : 1.0f;
         }
     }
     bool dirty = (piv_textures[0] == nullptr);
@@ -659,11 +661,8 @@ void UI::DrawPIV()
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
     {
-        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
-        float data_min = maps[piv_map]->minCoeff();
-        float data_max = maps[piv_map]->maxCoeff();
-        if(!std::isfinite(data_min)) data_min = 0.0f;
-        if(!std::isfinite(data_max)) data_max = 1.0f;
+        float data_min = data_min_cache[piv_map];
+        float data_max = data_max_cache[piv_map];
         float step = (data_max - data_min) / 200.0f;
         int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];
@@ -738,6 +737,7 @@ void UI::DrawVal()
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
+    static float data_min_cache[3] = {0,0,0}, data_max_cache[3] = {1,1,1};
     if(val_textures[0] == nullptr)
     {
         // Auto-range all three maps on first build
@@ -746,6 +746,8 @@ void UI::DrawVal()
         {
             val_cmap_min[i] = maps[i]->minCoeff();
             val_cmap_max[i] = maps[i]->maxCoeff();
+            data_min_cache[i] = std::isfinite(val_cmap_min[i]) ? val_cmap_min[i] : 0.0f;
+            data_max_cache[i] = std::isfinite(val_cmap_max[i]) ? val_cmap_max[i] : 1.0f;
         }
     }
     bool dirty = (val_textures[0] == nullptr);
@@ -817,11 +819,8 @@ void UI::DrawVal()
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
     {
-        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
-        float data_min = maps[val_map]->minCoeff();
-        float data_max = maps[val_map]->maxCoeff();
-        if(!std::isfinite(data_min)) data_min = 0.0f;
-        if(!std::isfinite(data_max)) data_max = 1.0f;
+        float data_min = data_min_cache[val_map];
+        float data_max = data_max_cache[val_map];
         float step = (data_max - data_min) / 200.0f;
         int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];
@@ -891,10 +890,13 @@ void UI::DrawSurf()
 
     // --- Rebuild if invalidated or colormap range changed ---
     static float last_min = 0, last_max = 0;
+    static float data_min_cache = 0.0f, data_max_cache = 1.0f;
     if(surf_texture == nullptr)
     {
         surf_cmap_min = surface.minCoeff();
         surf_cmap_max = surface.maxCoeff();
+        data_min_cache = std::isfinite(surf_cmap_min) ? surf_cmap_min : 0.0f;
+        data_max_cache = std::isfinite(surf_cmap_max) ? surf_cmap_max : 1.0f;
     }
     if(surf_texture == nullptr || surf_cmap_min != last_min || surf_cmap_max != last_max)
     {
@@ -955,10 +957,8 @@ void UI::DrawSurf()
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
     {
-        float data_min = surface.minCoeff();
-        float data_max = surface.maxCoeff();
-        if(!std::isfinite(data_min)) data_min = 0.0f;
-        if(!std::isfinite(data_max)) data_max = 1.0f;
+        float data_min = data_min_cache;
+        float data_max = data_max_cache;
         float step = (data_max - data_min) / 200.0f;
         int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];

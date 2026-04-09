@@ -6,10 +6,16 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     //Mean Subtraction (account for tilt) ------------------------------------------------------------
     //Could remove real gradient data from large refractive index migration in material
     auto nonzero_u = (data.u.array() != 0.0f);
-    float mean_u = nonzero_u.select(data.u.array(), 0.0f).sum() / nonzero_u.count();
+    auto count_u = nonzero_u.count();
+    float mean_u = count_u > 0 
+        ? nonzero_u.select(data.u.array(), 0.0f).sum() / count_u 
+        : 0.0f;
 
     auto nonzero_v = (data.v.array() != 0.0f);
-    float mean_v = nonzero_v.select(data.v.array(), 0.0f).sum() / nonzero_v.count();
+    auto count_v = nonzero_v.count();
+    float mean_v = count_v > 0 
+        ? nonzero_v.select(data.v.array(), 0.0f).sum() / count_v 
+        : 0.0f;
 
     Eigen::MatrixXf u_cent = nonzero_u.select(data.u.array() - mean_u, 0.0f);
     Eigen::MatrixXf v_cent = nonzero_v.select(data.v.array() - mean_v, 0.0f);
