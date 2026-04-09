@@ -65,6 +65,9 @@ private:
     fftwf_complex* product   = nullptr;
     float*         ccmap_raw = nullptr;
 
+    //Store fft for findpeak use
+    fftwf_complex* ref_out_saved = nullptr;
+
     int rows = 0, cols = 0, freq_cols = 0;
 
     fftwf_plan ref_plan  = nullptr;

@@ -39,6 +39,7 @@ void PIV::AllocateFFTBuffers()
     ref_out = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
     flow_out = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
     product  = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * rows * freq_cols);
+    ref_out_saved = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
     ccmap_raw = (float*)        fftwf_malloc(sizeof(float)         * rows * cols);
 
     ref_plan  = fftwf_plan_dft_r2c_2d(rows, cols, ref_in,  ref_out,  FFTW_MEASURE);
@@ -61,6 +62,7 @@ void PIV::FreeFFTBuffers()
     if(ref_plan) fftwf_destroy_plan(ref_plan);
     if(flow_plan) fftwf_destroy_plan(flow_plan);
     if(inv_plan) fftwf_destroy_plan(inv_plan);
+    if(ref_out_saved) fftwf_free(ref_out_saved);
     if(ref_in) fftwf_free(ref_in);
     if(flow_in) fftwf_free(flow_in);
     if(ref_out) fftwf_free(ref_out);
@@ -119,6 +121,18 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
                 std::min(window_size, ref_size(0) - win_row * movement),
                 std::min(window_size, ref_size(1) - win_col * movement));
 
+            //Check total variance of the reference window, if it is below 0.1%, assume there is essentially nothign there
+            //May need to test teh percent here.
+            float mean = w_reference.mean();
+            float variance = (w_reference.array() - mean).square().sum() / (window_size * window_size);
+            if(variance < 0.001f)
+            {
+                vectorfield.u(win_row, win_col) = 0.0f;
+                vectorfield.v(win_row, win_col) = 0.0f;
+                vectorfield.s2n(win_row, win_col) = 0.0f;
+                continue;
+            }
+
             Eigen::MatrixXf ccmap = CrossCorrelationFFT(w_reference, w_flow);
 
             PeakResult peak = FindPeak(ccmap, w_reference, w_flow,
@@ -163,6 +177,9 @@ Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, con
     //Execute FFT
     fftwf_execute(ref_plan);
     fftwf_execute(flow_plan);
+
+    //Save fft
+    memcpy(ref_out_saved, ref_out, sizeof(fftwf_complex) * rows * freq_cols);
 
     //Actual Cross Correlation (ref* x flow)
     for(int i = 0; i < rows * freq_cols; i++)
@@ -285,16 +302,9 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
     Eigen::Vector2i ref_size(w_reference.rows(), w_reference.cols());
     Eigen::Vector2i flow_size(w_flow.rows(), w_flow.cols());
 
-    // Zero-pad reference to match flow/search size
-    Eigen::MatrixXf w_refpad = Eigen::MatrixXf::Zero(flow_size(0), flow_size(1));
-    int pad_r = (flow_size(0) - ref_size(0)) / 2;
-    int pad_c = (flow_size(1) - ref_size(1)) / 2;
-
-    w_refpad.block(pad_r, pad_c, ref_size(0), ref_size(1)) = w_reference;
-
     // Apply same Hann windowing
-    Eigen::MatrixXf ref_proc  = w_refpad.array() * hann2d.array();
-    Eigen::MatrixXf flow_proc = w_flow.array()   * hann2d.array();
+    Eigen::MatrixXf ref_proc  = w_reference;
+    Eigen::MatrixXf flow_proc = w_flow;
 
     // Apply same mean subtraction
     ref_proc.array()  -= ref_proc.mean();
@@ -306,9 +316,6 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
     // Full-window FFT gives integer peak SNR. Local patch gives sub-pixel accuracy.
     // Both phi and phi' are built from the same patch -- consistency preserved.
     using clk = std::chrono::high_resolution_clock;
-
-    static constexpr int PS  = ref_proc.cols();   // patch size -- sized for 2-4px dots
-    static constexpr int PSH = PS/2; // 5
 
     // Integer displacement in image coordinates
     int int_u = col - ccmap.cols()/2;
@@ -334,50 +341,10 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
     if(gauss_u < 0.0f) { int_u -= 1; gauss_u += 1.0f; }
     if(gauss_v < 0.0f) { int_v -= 1; gauss_v += 1.0f; }
 
-    // NOW compute patch centers using adjusted int_u/int_v
-    int ref_cx = ref_proc.rows()/2;
-    int ref_cy = ref_proc.cols()/2;
-    int flow_cx = ref_cx + int_v;
-    int flow_cy = ref_cy + int_u;
-
-    // --- Patch extraction ---
-    auto t0 = clk::now();
-
-    float patch_ref[PS*PS]  = {};
-    float patch_flow[PS*PS] = {};
-
-    for(int pi = 0; pi < PS; pi++) {
-        for(int pj = 0; pj < PS; pj++) {
-            int ri = ref_cx  - PSH + pi;
-            int rj = ref_cy  - PSH + pj;
-            int fi = flow_cx - PSH + pi;
-            int fj = flow_cy - PSH + pj;
-            if(ri >= 0 && ri < ref_proc.rows() &&
-               rj >= 0 && rj < ref_proc.cols())
-                patch_ref[pi*PS + pj] = ref_proc(ri,rj);
-            if(fi >= 0 && fi < flow_proc.rows() &&
-               fj >= 0 && fj < flow_proc.cols())
-                patch_flow[pi*PS + pj] = flow_proc(fi,fj);
-        }
-    }
-
-    t_patch += std::chrono::duration<double>(clk::now() - t0).count();
-    t0 = clk::now();
+    if(!std::isfinite(gauss_u)) gauss_u = 0.5f;
+    if(!std::isfinite(gauss_v)) gauss_v = 0.5f;
     
-    // Mean subtract patches -- raw ref_proc/flow_proc have ~0.6 DC offset
-    // which flattens autocorrelation R, making Gamma degenerate.
-    // Removing the mean isolates the dot signal so R is properly peaked.
-    float mean_ref = 0.0f, mean_flow = 0.0f;
-    for(int i = 0; i < PS*PS; i++) {
-        mean_ref  += patch_ref[i];
-        mean_flow += patch_flow[i];
-    }
-    mean_ref  /= float(PS*PS);
-    mean_flow /= float(PS*PS);
-    for(int i = 0; i < PS*PS; i++) {
-        patch_ref[i]  -= mean_ref;
-        patch_flow[i] -= mean_flow;
-    }
+    auto t0 = clk::now();
 
     // --- Local phi ---
     // Step 2 (local): compute phi(m,n) from local patch cross-correlation.
@@ -388,6 +355,7 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
         for(int n = -2; n <= 2; n++)
             phi[(m+2)*5+(n+2)] = ccmap(row+m, col+n);
 
+
     t_phi += std::chrono::duration<double>(clk::now() - t0).count();
     t0 = clk::now();
 
@@ -397,18 +365,20 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
     // Offsets: m in [-2,2], a in {-1,0,1,2} → total range [-3,4] -> 8 values each axis.
     // Cost: 64 x 121 = 7,744 ops (vs 48,400 for the p,q Gamma loop).
 
-    // --- Autocorr R ---
+    // Autocorrelation from saved FFT
+    for(int i = 0; i < rows * freq_cols; i++) {
+        product[i][0] = ref_out_saved[i][0]*ref_out_saved[i][0] 
+                    + ref_out_saved[i][1]*ref_out_saved[i][1];
+        product[i][1] = 0.0f;
+    }
+    fftwf_execute(inv_plan);
+
     float R[8][8] = {};
     for(int p = -4; p <= 3; p++)
         for(int q = -4; q <= 3; q++) {
-            float sum = 0.0f;
-            for(int i = 0; i < PS; i++)
-                for(int j = 0; j < PS; j++) {
-                    int ip = i + p, jq = j + q;
-                    if(ip >= 0 && ip < PS && jq >= 0 && jq < PS)
-                        sum += patch_ref[i*PS + j] * patch_ref[ip*PS + jq];
-                }
-            R[p+4][q+4] = sum;
+            int ri = (p + rows) % rows;
+            int ci = (q + cols) % cols;
+            R[p+4][q+4] = ccmap_raw[ri * cols + ci] / float(rows * cols);
         }
 
     t_R += std::chrono::duration<double>(clk::now() - t0).count();
@@ -511,12 +481,19 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
                         Gamma[m + 2][n + 2][k] +=
                             W[k][a + 1][b + 1] * R[m + a + 3][n + b + 3];
 
+    float gamma_scale = phi[2*5+2] / Gamma[2][2][15];
+    for(int m = 0; m < 5; m++)
+        for(int n = 0; n < 5; n++)
+            for(int k = 0; k < 16; k++)
+                Gamma[m][n][k] *= gamma_scale;
+
     static int debug_count = 0;
-    if(debug_count > 100000 & debug_count < 100008) {
+    if(debug_count > 100000 && debug_count < 100008) 
+    {
         printf("\n=== Window %d ===\n", debug_count);
         printf("int_u=%d int_v=%d gauss_u=%.4f gauss_v=%.4f\n", int_u, int_v, gauss_u, gauss_v);
         printf("phi center: %.6f\n", phi[2*5+2]);
-        printf("phi neighbors: %.6f %.6f %.6f\n", phi[1*5+2], phi[3*5+2], phi[2*5+3]);
+        printf("phi neighbors: %.6f %.6f %.6f %.6f\n", phi[1*5+2], phi[3*5+2], phi[2*5+1], phi[2*5+3]);
         printf("R(0,0)=%.6f R(1,0)=%.6f R(0,1)=%.6f\n", R[4][4], R[5][4], R[4][5]);
         printf("Gamma[2][2][15]=%.6f\n", Gamma[2][2][15]);
     }
@@ -527,11 +504,11 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
 
     // Step 5: Newton-Raphson minimization of residue eq.(9).
     // Seeded by Gaussian sub-pixel estimate -- already close to the minimum,
-    // ensures convergence in 3-5 iterations rather than a global search.
+    // ensures convergence in 3-5 iterations.
     // Only the sub-pixel fractional part (offset from integer peak) is needed.
 
-    float up = gauss_u;
-    float vp = gauss_v;
+    float up = gauss_u; //Defined above
+    float vp = gauss_v; //^
 
     // Newton-Raphson loop: at each step compute gradient (g_u, g_v) and
     // Hessian (H_uu, H_vv, H_uv) of eps(u',v') from eq.(9) analytically,
@@ -539,7 +516,7 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
     // Derivatives of basis_k computed by power rule from eq.(6) term order.
     for(int iter = 0; iter < 10; iter++)
     {
-        float eu = 1.0f - up, ev = 1.0f - vp;
+        float eu = 1.0f - vp, ev = 1.0f - up;
         float eu2 = eu*eu, eu3 = eu2*eu;
         float ev2 = ev*ev, ev3 = ev2*ev;
 
@@ -556,32 +533,32 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
         float Buv[16] = {9*eu2*ev2, 6*eu2*ev, 6*eu*ev2, 4*eu*ev, 3*eu2, 3*ev2, 0, 0,
                         2*eu,      2*ev,     0,         0,       1,     0,     0, 0};
 
-        float g_u=0, g_v=0, H_uu=0, H_vv=0, H_uv=0;
+        float g_u = 0, g_v = 0, H_uu = 0, H_vv = 0, H_uv = 0;
 
         for(int m = -2; m <= 2; m++) {
             for(int n = -2; n <= 2; n++) {
-                const float* G = Gamma[m+2][n+2];
-                float pv=0, pu=0, pv_=0, puu=0, pvv=0, puv=0;
+                const float* G = Gamma[m + 2][n + 2];
+                float pv = 0, pu = 0, pv_ = 0, puu = 0, pvv = 0, puv = 0;
                 for(int k = 0; k < 16; k++) {
-                    pv  += G[k]*B[k];    pu  += G[k]*Bu[k];
-                    pv_ += G[k]*Bv[k];   puu += G[k]*Buu[k];
-                    pvv += G[k]*Bvv[k];  puv += G[k]*Buv[k];
+                    pv  += G[k] * B[k];    pu  += G[k] * Bu[k];
+                    pv_ += G[k] * Bv[k];   puu += G[k] * Buu[k];
+                    pvv += G[k] * Bvv[k];  puv += G[k] * Buv[k];
                 }
                 float r = phi[(m + 2) * 5 + (n + 2)] - pv;
-                g_u  += -2.0f*r*pu;
-                g_v  += -2.0f*r*pv_;
-                H_uu += 2.0f*pu*pu   - 2.0f*r*puu;
-                H_vv += 2.0f*pv_*pv_ - 2.0f*r*pvv;
-                H_uv += 2.0f*pu*pv_  - 2.0f*r*puv;
+                g_u  += -2.0f * r * pu;
+                g_v  += -2.0f * r * pv_;
+                H_uu += 2.0f * pu * pu   - 2.0f * r * puu;
+                H_vv += 2.0f * pv_ * pv_ - 2.0f * r * pvv;
+                H_uv += 2.0f * pu * pv_  - 2.0f * r * puv;
             }
         }
 
         // Solve 2x2 system H*delta = -g via Cramer's rule
-        float det = H_uu*H_vv - H_uv*H_uv;
+        float det = H_uu * H_vv - H_uv * H_uv;
         if(std::abs(det) < 1e-10f) break;
 
-        float delta_u = (-g_u*H_vv + g_v*H_uv) / det;
-        float delta_v = (-g_v*H_uu + g_u*H_uv) / det;
+        float delta_u = (-g_u * H_vv + g_v * H_uv) / det;
+        float delta_v = (-g_v * H_uu + g_u * H_uv) / det;
 
         up = std::clamp(up + delta_u, 0.0f, 0.99f);
         vp = std::clamp(vp + delta_v, 0.0f, 0.99f);
