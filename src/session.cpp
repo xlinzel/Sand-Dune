@@ -403,10 +403,16 @@ void Session::ComputeThicknessMap()
         //Mean Subtraction (account for tilt) ------------------------------------------------------------
         //Could remove real gradient data from large refractive index migration in material
         auto nonzero_u = (raw_val_field[fi].u.array() != 0.0f);
-        float mean_u = nonzero_u.select(raw_val_field[fi].u.array(), 0.0f).sum() / nonzero_u.count();
+        auto count_u = nonzero_u.count();
+        float mean_u = count_u > 0 
+            ? nonzero_u.select(raw_val_field[fi].u.array(), 0.0f).sum() / count_u 
+            : 0.0f;
 
-        auto nonzero_v = (raw_val_field[fi].v.array() != 0.0f);
-        float mean_v = nonzero_v.select(raw_val_field[fi].v.array(), 0.0f).sum() / nonzero_v.count();
+        auto nonzero_v = (raw_val_field[fi].u.array() != 0.0f);
+        auto count_v = nonzero_v.count();
+        float mean_v = count_v > 0 
+            ? nonzero_v.select(raw_val_field[fi].u.array(), 0.0f).sum() / count_v 
+            : 0.0f;
 
         Eigen::MatrixXf u_cent = nonzero_u.select(raw_val_field[fi].u.array() - mean_u, 0.0f);
         Eigen::MatrixXf v_cent = nonzero_v.select(raw_val_field[fi].v.array() - mean_v, 0.0f);
