@@ -8,6 +8,7 @@
 #include <session.h>
 #include <iostream>
 #include <chrono>
+#include <algorithm>
 #include <vector>
 #include <random>
 #include <cmath>
@@ -18,6 +19,9 @@
 
 namespace
 {
+constexpr int kTestWindowSize = 32;
+constexpr int kTestOverlap = 24;
+
 std::string FormatFloat(double value, int precision = 6)
 {
     std::ostringstream out;
@@ -103,6 +107,7 @@ std::string FormatUV(double u_value, double v_value, const std::string& suffix =
 {
     return "u=" + FormatFloat(u_value) + suffix + ", v=" + FormatFloat(v_value) + suffix;
 }
+
 }
 
 auto FormatTime = [](std::chrono::steady_clock::time_point start, 
@@ -157,19 +162,19 @@ TEST_CASE("PIV Computation")
 {
     SUBCASE("Parameters")
     {
-        PIV piv(64, 48);
-        CHECK(piv.GetWindowSize() == 64);
-        CHECK(piv.GetOverlap() == 48);
+        PIV piv(kTestWindowSize, kTestOverlap);
+        CHECK(piv.GetWindowSize() == kTestWindowSize);
+        CHECK(piv.GetOverlap() == kTestOverlap);
 
-        piv.SetWindowSize(32);
-        CHECK(piv.GetWindowSize() == 32);
+        piv.SetWindowSize(kTestWindowSize / 2);
+        CHECK(piv.GetWindowSize() == kTestWindowSize / 2);
     }
 
     SUBCASE("Zero Displacement")
     {
         // Identical images should produce near-zero displacement
         Eigen::MatrixXf img = Eigen::MatrixXf::Random(200, 200);
-        PIV piv(64, 48);
+        PIV piv(kTestWindowSize, kTestOverlap);
         VectorField result = piv.Compute(img, img);
 
         CHECK(result.u.cwiseAbs().maxCoeff() < 0.15f);
@@ -185,7 +190,7 @@ TEST_CASE("PIV Computation")
         Eigen::MatrixXf flow = Eigen::MatrixXf::Zero(200, 200);
         flow.block(0, 5, 200, 195) = ref.block(0, 0, 200, 195);
 
-        PIV piv(64, 48);
+        PIV piv(kTestWindowSize, kTestOverlap);
         VectorField result = piv.Compute(ref, flow);
 
         // Centre window should detect ~5px horizontal displacement
@@ -259,7 +264,7 @@ TEST_CASE("PIV Computation")
         {
             Eigen::MatrixXf flow = render(shift.x(), shift.y());
 
-            PIV piv(64, 48);
+            PIV piv(kTestWindowSize, kTestOverlap);
             VectorField result = piv.Compute(ref, flow);
 
             CHECK(std::abs(result.u.mean() - shift.x()) < 0.08f);
@@ -277,7 +282,7 @@ TEST_CASE("PIV Repo Image Pair")
     CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_ref.bmp").c_str()).empty());
     CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_flow.bmp").c_str()).empty());
 
-    PIV piv(32, 24);
+    PIV piv(kTestWindowSize, kTestOverlap);
     VectorField result = piv.Compute(ref_image.GetMat(), flow_image.GetMat());
 
     float u_mean = result.u.mean();
@@ -564,7 +569,7 @@ TEST_CASE("Slide Gradient Diagnostics")
         CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/" + pair.ref_name).c_str()).empty());
         CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/" + pair.flow_name).c_str()).empty());
 
-        PIV piv(32, 24);
+        PIV piv(kTestWindowSize, kTestOverlap);
         VectorField raw = piv.Compute(ref_image.GetMat(), flow_image.GetMat());
         VectorField filtered = validation.PostProcess(raw);
 
@@ -737,8 +742,8 @@ TEST_CASE("Full Pipeline Test")
     Session session;
 
     // Parameters
-    session.pivparameters.window_size = 64;
-    session.pivparameters.overlap = 54;
+    session.pivparameters.window_size = kTestWindowSize;
+    session.pivparameters.overlap = kTestOverlap;
 
     session.opticalparameters.Z_d = 300.0f;
     session.opticalparameters.Z_a = 100.0f;

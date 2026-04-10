@@ -117,8 +117,7 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
 
                 Eigen::MatrixXf ccmap = CrossCorrelationFFT(ref_window, flow_window);
 
-                PeakResult peak = FindPeak(ccmap,
-                                           t_patch, t_phi, t_R, t_gamma, t_nr);
+                PeakResult peak = FindPeak(ccmap, t_patch, t_phi, t_R, t_gamma, t_nr);
                 window_count++;
                 vectorfield.u(win_row, win_col) = peak.u;
                 vectorfield.v(win_row, win_col) = peak.v;
@@ -145,8 +144,7 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
 
                 Eigen::MatrixXf ccmap = CrossCorrelationFFT(padded_reference, padded_flow);
 
-                PeakResult peak = FindPeak(ccmap,
-                                           t_patch, t_phi, t_R, t_gamma, t_nr);
+                PeakResult peak = FindPeak(ccmap, t_patch, t_phi, t_R, t_gamma, t_nr);
                 window_count++;
                 vectorfield.u(win_row, win_col) = peak.u;
                 vectorfield.v(win_row, win_col) = peak.v;
@@ -628,7 +626,9 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap,
                 }
             }
 
-            if(!accepted || (std::abs(delta_u) < 1e-4f && std::abs(delta_v) < 1e-4f))
+            if(!accepted)
+                break;
+            if(std::abs(delta_u) < 1e-4f && std::abs(delta_v) < 1e-4f)
                 break;
         }
 
