@@ -2,22 +2,22 @@
 #include <algorithm>
 #include <fftw3.h>
 #include <cmath>
-#include <numbers>
 #include <chrono>
+#include <numeric>
 
 PIV::PIV()
 {
     AllocateFFTBuffers();
 }
 
-PIV::PIV(const int window_size, const int overlap, const int search_size)
-    : window_size(window_size), overlap(overlap), search_size(search_size)
+PIV::PIV(const int window_size, const int overlap)
+    : window_size(window_size), overlap(overlap)
 {
     AllocateFFTBuffers();
 }
 
 PIV::PIV(const PIVParameters parameters)
-    : window_size(parameters.window_size), overlap(parameters.overlap), search_size(parameters.search_size)
+    : window_size(parameters.window_size), overlap(parameters.overlap)
 {
     AllocateFFTBuffers();
 }
@@ -46,15 +46,6 @@ void PIV::AllocateFFTBuffers()
     flow_plan = fftwf_plan_dft_r2c_2d(rows, cols, flow_in, flow_out, FFTW_MEASURE);
     inv_plan  = fftwf_plan_dft_c2r_2d(rows, cols, product, ccmap_raw, FFTW_MEASURE);
 
-    //Hann Window Preprocessing
-    Eigen::VectorXf hannr(rows), hannc(cols);
-
-    for(int i = 0; i < rows; i++)
-        hannr(i) = 0.5f * (1.0f - cos((2.0f * i * std::numbers::pi) / (rows - 1)));
-    for(int j = 0; j < cols; j++)
-        hannc(j) = 0.5f * (1.0f - cos((2.0f * j * std::numbers::pi) / (cols - 1)));
-
-    hann2d = hannr * hannc.transpose();
 }
 
 void PIV::FreeFFTBuffers()
@@ -83,83 +74,110 @@ VectorField PIV::Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf
     }
 
     int movement = window_size - overlap;
+    int num_rows = floor(ref_size(0) / movement);
+    int num_cols = floor(ref_size(1) / movement);
 
-    int total_windows = floor(ref_size(0) / movement) * floor(ref_size(1) / movement);
+    int total_windows = num_rows * num_cols;
     int completed = 0;
 
     // Profiling accumulators -- remove after tuning
     double t_patch = 0, t_phi = 0, t_R = 0, t_gamma = 0, t_nr = 0;
     int window_count = 0;
 
-    VectorField vectorfield(floor(ref_size(0) / movement),floor(ref_size(1) / movement));
+    VectorField vectorfield(num_rows, num_cols);
+    Eigen::MatrixXf padded_reference(window_size, window_size);
+    Eigen::MatrixXf padded_flow(window_size, window_size);
 
-    for(int win_row = 0; win_row < floor(ref_size(0) / movement); win_row++)
+    for(int win_row = 0; win_row < num_rows; win_row++)
     {
-        for(int win_col = 0; win_col < floor(ref_size(1) / movement); win_col++)
+        for(int win_col = 0; win_col < num_cols; win_col++)
         {
-            Eigen::MatrixXf w_reference = Eigen::MatrixXf::Zero(window_size, window_size);
+            int start_row = win_row * movement;
+            int start_col = win_col * movement;
+            int block_rows = std::min(window_size, ref_size(0) - start_row);
+            int block_cols = std::min(window_size, ref_size(1) - start_col);
+            bool full_window = (block_rows == window_size && block_cols == window_size);
 
-            w_reference.block(
-                0, 0,
-                std::min(window_size, ref_size(0) - win_row * movement),
-                std::min(window_size, ref_size(1) - win_col * movement)) 
-                
-            = reference.block(
-                win_row * movement, win_col * movement,
-                std::min(window_size, ref_size(0) - win_row * movement),
-                std::min(window_size, ref_size(1) - win_col * movement));
-
-            Eigen::MatrixXf w_flow = Eigen::MatrixXf::Zero(window_size, window_size);
-
-            w_flow.block(
-                0, 0,
-                std::min(window_size, ref_size(0) - win_row * movement),
-                std::min(window_size, ref_size(1) - win_col * movement))
-            
-            = flow.block(
-                win_row * movement, win_col * movement,
-                std::min(window_size, ref_size(0) - win_row * movement),
-                std::min(window_size, ref_size(1) - win_col * movement));
-
-            //Check total variance of the reference window, if it is below 0.1%, assume there is essentially nothign there
-            //May need to test teh percent here.
-            float mean = w_reference.mean();
-            float variance = (w_reference.array() - mean).square().sum() / (window_size * window_size);
-            if(variance < 0.001f)
+            if(full_window)
             {
-                vectorfield.u(win_row, win_col) = 0.0f;
-                vectorfield.v(win_row, win_col) = 0.0f;
-                vectorfield.s2n(win_row, win_col) = 0.0f;
-                continue;
+                auto ref_window = reference.block(start_row, start_col, window_size, window_size);
+                auto flow_window = flow.block(start_row, start_col, window_size, window_size);
+
+                //Check total variance of the reference window, if it is below 0.1%, assume there is essentially nothign there
+                //May need to test teh percent here.
+                float mean = ref_window.mean();
+                float variance = (ref_window.array() - mean).square().sum() / (window_size * window_size);
+                if(variance < 0.001f)
+                {
+                    vectorfield.u(win_row, win_col) = 0.0f;
+                    vectorfield.v(win_row, win_col) = 0.0f;
+                    vectorfield.s2n(win_row, win_col) = 0.0f;
+                    continue;
+                }
+
+                Eigen::MatrixXf ccmap = CrossCorrelationFFT(ref_window, flow_window);
+
+                PeakResult peak = FindPeak(ccmap,
+                                           t_patch, t_phi, t_R, t_gamma, t_nr);
+                window_count++;
+                vectorfield.u(win_row, win_col) = peak.u;
+                vectorfield.v(win_row, win_col) = peak.v;
+                vectorfield.s2n(win_row, win_col) = peak.s2n;
             }
+            else
+            {
+                padded_reference.setZero();
+                padded_flow.setZero();
+                padded_reference.block(0, 0, block_rows, block_cols) =
+                    reference.block(start_row, start_col, block_rows, block_cols);
+                padded_flow.block(0, 0, block_rows, block_cols) =
+                    flow.block(start_row, start_col, block_rows, block_cols);
 
-            Eigen::MatrixXf ccmap = CrossCorrelationFFT(w_reference, w_flow);
+                float mean = padded_reference.mean();
+                float variance = (padded_reference.array() - mean).square().sum() / (window_size * window_size);
+                if(variance < 0.001f)
+                {
+                    vectorfield.u(win_row, win_col) = 0.0f;
+                    vectorfield.v(win_row, win_col) = 0.0f;
+                    vectorfield.s2n(win_row, win_col) = 0.0f;
+                    continue;
+                }
 
-            PeakResult peak = FindPeak(ccmap, w_reference, w_flow,
-                                       t_patch, t_phi, t_R, t_gamma, t_nr);
-            window_count++;
-            vectorfield.u(win_row, win_col) = peak.u;
-            vectorfield.v(win_row, win_col) = peak.v;
-            vectorfield.s2n(win_row, win_col) = peak.s2n;
+                Eigen::MatrixXf ccmap = CrossCorrelationFFT(padded_reference, padded_flow);
+
+                PeakResult peak = FindPeak(ccmap,
+                                           t_patch, t_phi, t_R, t_gamma, t_nr);
+                window_count++;
+                vectorfield.u(win_row, win_col) = peak.u;
+                vectorfield.v(win_row, win_col) = peak.v;
+                vectorfield.s2n(win_row, win_col) = peak.s2n;
+            }
 
             if(on_progress) on_progress(++completed / (float)total_windows);
         }
     }
 
-    double total = t_patch + t_phi + t_R + t_gamma + t_nr;
-    printf("\n--- FindPeak timing over %d windows ---\n", window_count);
-    printf("Patch extraction:  %6.2f ms  (%4.1f%%)\n", t_patch*1e3,  100*t_patch/total);
-    printf("Local phi:         %6.2f ms  (%4.1f%%)\n", t_phi*1e3,    100*t_phi/total);
-    printf("Autocorr R:        %6.2f ms  (%4.1f%%)\n", t_R*1e3,      100*t_R/total);
-    printf("Gamma from W:      %6.2f ms  (%4.1f%%)\n", t_gamma*1e3,  100*t_gamma/total);
-    printf("Newton-Raphson:    %6.2f ms  (%4.1f%%)\n", t_nr*1e3,     100*t_nr/total);
-    printf("Total in FindPeak: %6.2f ms\n", total*1e3);
-    printf("Per window:        %6.4f ms\n", total*1e3/window_count);
+    // Keep optional FindPeak profiling available for debugging, but leave it
+    // disabled during normal runs because the timing dump floods the console.
+    constexpr bool kPrintFindPeakTiming = false;
+    if(kPrintFindPeakTiming && window_count > 0)
+    {
+        double total = t_patch + t_phi + t_R + t_gamma + t_nr;
+        printf("\n--- FindPeak timing over %d windows ---\n", window_count);
+        printf("Patch extraction:  %6.2f ms  (%4.1f%%)\n", t_patch*1e3,  100*t_patch/total);
+        printf("Local phi:         %6.2f ms  (%4.1f%%)\n", t_phi*1e3,    100*t_phi/total);
+        printf("Autocorr R:        %6.2f ms  (%4.1f%%)\n", t_R*1e3,      100*t_R/total);
+        printf("Interp prep:       %6.2f ms  (%4.1f%%)\n", t_gamma*1e3,  100*t_gamma/total);
+        printf("Subpixel search:   %6.2f ms  (%4.1f%%)\n", t_nr*1e3,     100*t_nr/total);
+        printf("Total in FindPeak: %6.2f ms\n", total*1e3);
+        printf("Per window:        %6.4f ms\n", total*1e3/window_count);
+    }
 
     return vectorfield;
 }
 
-Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow)
+Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::Ref<const Eigen::MatrixXf>& w_reference,
+                                         const Eigen::Ref<const Eigen::MatrixXf>& w_flow)
 {
     Eigen::Vector2i size(w_reference.rows(), w_reference.cols());
 
@@ -210,7 +228,8 @@ Eigen::MatrixXf PIV::CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, con
     return ccmap_shifted;
 }
 
-Eigen::MatrixXf PIV::CrossCorrelationSpatial(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow)
+Eigen::MatrixXf PIV::CrossCorrelationSpatial(const Eigen::Ref<const Eigen::MatrixXf>& w_reference,
+                                             const Eigen::Ref<const Eigen::MatrixXf>& w_flow)
 {
     Eigen::Vector2i ref_size(w_reference.rows(), w_reference.cols());
     Eigen::Vector2i flow_size(w_flow.rows(), w_flow.cols());
@@ -242,31 +261,15 @@ Eigen::MatrixXf PIV::CrossCorrelationSpatial(const Eigen::MatrixXf& w_reference,
     return ccmap;
 }
 
-//For the source of the CMM method: https://iopscience.iop.org/article/10.1088/0957-0233/16/8/010
-//Comments are written by Claude and double checked to explain the method with reference to the paper math
-
-PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow,
+PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap,
                               double& t_patch, double& t_phi, double& t_R, double& t_gamma, double& t_nr)
 {
-    // CMM: Chen & Katz 2005, "Elimination of peak-locking error in PIV analysis
-    //      using the correlation mapping method", Meas. Sci. Technol. 16, 1605-1618
-    //
-    // The displacement (U,V) is split into an integer part (uint, vint) found from
-    // the discrete correlation peak, and a sub-pixel part (u,v) found by CMM.
-    // See paper section 2.1, equation before eq.(4).
-
-    // Step 1 (paper section 2.1): Find integer displacement (uint, vint)
-    // by locating the peak of the discrete correlation map phi(m,n) -- eq.(1)
     int row, col;
     float peak = ccmap.maxCoeff(&row, &col);
 
-    // CMM requires a 5x5 neighborhood around the peak (m,n in [-2,2]).
-    // If the peak is within 2 pixels of the ccmap border, that neighborhood
-    // would go out of bounds. Fall back to integer-only displacement in that case.
     if ((row == 0 || row == ccmap.rows() - 1 || col == 0 || col == ccmap.cols() - 1)
         || row == 1 || row == ccmap.rows() - 2 || col == 1 || col == ccmap.cols() - 2)
     {
-        // SCC PPR signal to noise ratio calculations
         Eigen::MatrixXf ccmap_flattened = ccmap.array() - ccmap.minCoeff();
 
         peak = ccmap_flattened.maxCoeff();
@@ -285,87 +288,10 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
         return PeakResult{float(col - ccmap.cols()/2), float(row - ccmap.rows()/2), sig2noise};
     }
 
-    // -----------------------------------------------------------------------
-    // CMM: Correlation Mapping Method (Chen & Katz 2005)
-    //
-    // Core idea: instead of fitting a curve to the correlation peak (which causes
-    // peak-locking bias), express the second image as a bicubic polynomial of the
-    // first image and the unknown sub-pixel displacement. The virtual correlation
-    // phi'(m,n,u',v') then becomes a third-order polynomial in (u',v') whose
-    // coefficients depend only on g1. Matching phi' to the measured phi across a
-    // 5x5 neighborhood via least squares gives the sub-pixel displacement without
-    // any curve fitting. See paper section 2.
-    // -----------------------------------------------------------------------
-
-    // Rebuild windows in the same form used by CrossCorrelationFFT()
-
-    Eigen::Vector2i ref_size(w_reference.rows(), w_reference.cols());
-    Eigen::Vector2i flow_size(w_flow.rows(), w_flow.cols());
-
-    // Apply same Hann windowing
-    Eigen::MatrixXf ref_proc  = w_reference;
-    Eigen::MatrixXf flow_proc = w_flow;
-
-    // Apply same mean subtraction
-    ref_proc.array()  -= ref_proc.mean();
-    flow_proc.array() -= flow_proc.mean();
-
-    // Patch-local CMM: sub-pixel peak shape is determined by the dot profile,
-    // not the window size. For 2-4px dots the correlation peak is 4-8px wide.
-    // An 11x11 patch centered on the integer peak captures it completely.
-    // Full-window FFT gives integer peak SNR. Local patch gives sub-pixel accuracy.
-    // Both phi and phi' are built from the same patch -- consistency preserved.
     using clk = std::chrono::high_resolution_clock;
 
-    // Integer displacement in image coordinates
-    int int_u = col - ccmap.cols()/2;
-    int int_v = row - ccmap.rows()/2;
-
-    float gauss_u = 0.5f, gauss_v = 0.5f;
-
-    if(ccmap(row,col-1) > 0 && ccmap(row,col) > 0 && ccmap(row,col+1) > 0)
-        gauss_u = std::clamp(
-            col + (std::log(ccmap(row,col-1)) - std::log(ccmap(row,col+1)))
-                / (2*std::log(ccmap(row,col-1)) - 4*std::log(ccmap(row,col))
-                + 2*std::log(ccmap(row,col+1)))
-            - (float)col, -0.49f, 0.49f);
-
-    if(ccmap(row-1,col) > 0 && ccmap(row,col) > 0 && ccmap(row+1,col) > 0)
-        gauss_v = std::clamp(
-            row + (std::log(ccmap(row-1,col)) - std::log(ccmap(row+1,col)))
-                / (2*std::log(ccmap(row-1,col)) - 4*std::log(ccmap(row,col))
-                + 2*std::log(ccmap(row+1,col)))
-            - (float)row, -0.49f, 0.49f);
-
-    // Shift to [0,1): negative fractional -> shift integer peak, add 1 to sub-pixel
-    if(gauss_u < 0.0f) { int_u -= 1; gauss_u += 1.0f; }
-    if(gauss_v < 0.0f) { int_v -= 1; gauss_v += 1.0f; }
-
-    if(!std::isfinite(gauss_u)) gauss_u = 0.5f;
-    if(!std::isfinite(gauss_v)) gauss_v = 0.5f;
-    
     auto t0 = clk::now();
 
-    // --- Local phi ---
-    // Step 2 (local): compute phi(m,n) from local patch cross-correlation.
-    // Only 25 values needed (m,n in [-2,2]) -- spatial is cheaper than FFT here
-    // since we need 25 specific offsets out of ~484 possible. Cost: 25 x 121 = 3,025 ops.
-    float phi[25] = {};
-    for(int m = -2; m <= 2; m++)
-        for(int n = -2; n <= 2; n++)
-            phi[(m+2)*5+(n+2)] = ccmap(row+m, col+n);
-
-
-    t_phi += std::chrono::duration<double>(clk::now() - t0).count();
-    t0 = clk::now();
-
-    // Replace Gamma loop with autocorrelation of patch.
-    // Gamma[m][n][k] = sum_{a,b} W[k][a+1][b+1] * R[m+a+3][n+b+3]
-    // where R(p,q) = sum_{i,j} patch_ref(i,j) * patch_ref(i+p, j+q)
-    // Offsets: m in [-2,2], a in {-1,0,1,2} → total range [-3,4] -> 8 values each axis.
-    // Cost: 64 x 121 = 7,744 ops (vs 48,400 for the p,q Gamma loop).
-
-    // Autocorrelation from saved FFT
     for(int i = 0; i < rows * freq_cols; i++) {
         product[i][0] = ref_out_saved[i][0]*ref_out_saved[i][0] 
                     + ref_out_saved[i][1]*ref_out_saved[i][1];
@@ -373,214 +299,420 @@ PIV::PeakResult PIV::FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixX
     }
     fftwf_execute(inv_plan);
 
-    float R[8][8] = {};
-    for(int p = -4; p <= 3; p++)
-        for(int q = -4; q <= 3; q++) {
+    float R[9][9] = {};
+    for(int p = -4; p <= 4; p++)
+        for(int q = -4; q <= 4; q++) 
+        {
             int ri = (p + rows) % rows;
             int ci = (q + cols) % cols;
-            R[p+4][q+4] = ccmap_raw[ri * cols + ci] / float(rows * cols);
+            R[p + 4][q + 4] = ccmap_raw[ri * cols + ci] / float(rows * cols);
         }
 
     t_R += std::chrono::duration<double>(clk::now() - t0).count();
     t0 = clk::now();
 
-    // W[k][a+1][b+1]: appendix B bicubic weights recast as lookup table.
-    // Derived by reading each C[k] formula and placing weight for g(a,b)
-    // at W[k][a+1][b+1]. a,b in {-1,0,1,2}, indices 0..3.
-    // Transcribed directly from appendix B of Chen & Katz 2005.
-    static const float W[16][4][4] = {
-        // k=0: C[0] weights
-        {{ 1/36.f, -1/12.f,  1/12.f, -1/36.f},
-         {-1/12.f,  1/ 4.f, -1/ 4.f,  1/12.f},
-         { 1/12.f, -1/ 4.f,  1/ 4.f, -1/12.f},
-         {-1/36.f,  1/12.f, -1/12.f,  1/36.f}},
-        // k=1: C[1] weights
-        {{ 0,       0,       0,       0      },
-         {-1/12.f,  1/ 4.f, -1/ 4.f,  1/12.f},
-         { 1/ 6.f, -1/ 2.f,  1/ 2.f, -1/ 6.f},
-         {-1/12.f,  1/ 4.f, -1/ 4.f,  1/12.f}},
-        // k=2: C[2] weights
-        {{ 0,      -1/12.f,  1/ 6.f, -1/12.f},
-         { 0,       1/ 4.f, -1/ 2.f,  1/ 4.f},
-         { 0,      -1/ 4.f,  1/ 2.f, -1/ 4.f},
-         { 0,       1/12.f, -1/ 6.f,  1/12.f}},
-        // k=3: C[3] weights
-        {{ 0,       0,       0,       0      },
-         { 0,       1/ 4.f, -1/ 2.f,  1/ 4.f},
-         { 0,      -1/ 2.f,  1.0f,   -1/ 2.f},
-         { 0,       1/ 4.f, -1/ 2.f,  1/ 4.f}},
-        // k=4: C[4] weights
-        {{-1/36.f,  1/12.f, -1/12.f,  1/36.f},
-         { 1/ 6.f, -1/ 2.f,  1/ 2.f, -1/ 6.f},
-         {-1/12.f,  1/ 4.f, -1/ 4.f,  1/12.f},
-         {-1/18.f,  1/ 6.f, -1/ 6.f,  1/18.f}},
-        // k=5: C[5] weights
-        {{-1/36.f,  1/ 6.f, -1/12.f, -1/18.f},
-         { 1/12.f, -1/ 2.f,  1/ 4.f,  1/ 6.f},
-         {-1/12.f,  1/ 2.f, -1/ 4.f, -1/ 6.f},
-         { 1/36.f, -1/ 6.f,  1/12.f,  1/18.f}},
-        // k=6: C[6] weights
-        {{ 0,       0,       0,       0      },
-         { 0,       0,       0,       0      },
-         {-1/ 6.f,  1/ 2.f, -1/ 2.f,  1/ 6.f},
-         { 0,       0,       0,       0      }},
-        // k=7: C[7] weights
-        {{ 0,       0,      -1/ 6.f,  0      },
-         { 0,       0,       1/ 2.f,  0      },
-         { 0,       0,      -1/ 2.f,  0      },
-         { 0,       0,       1/ 6.f,  0      }},
-        // k=8: C[8] weights
-        {{ 0,       1/12.f, -1/ 6.f,  1/12.f},
-         { 0,      -1/ 2.f,  1.0f,   -1/ 2.f},
-         { 0,       1/ 4.f, -1/ 2.f,  1/ 4.f},
-         { 0,       1/ 6.f, -1/ 3.f,  1/ 6.f}},
-        // k=9: C[9] weights
-        {{ 0,       0,       0,       0      },
-         { 1/12.f, -1/ 2.f,  1/ 4.f,  1/ 6.f},
-         {-1/ 6.f,  1.0f,   -1/ 2.f, -1/ 3.f},
-         { 1/12.f, -1/ 2.f,  1/ 4.f,  1/ 6.f}},
-        // k=10: C[10] weights
-        {{ 0,       0,       0,       0      },
-         { 0,       0,       0,       0      },
-         { 0,       1/ 2.f, -1.0f,    1/ 2.f},
-         { 0,       0,       0,       0      }},
-        // k=11: C[11] weights
-        {{ 0,       0,       0,       0      },
-         { 0,       0,       1/ 2.f,  0      },
-         { 0,       0,      -1.0f,    0      },
-         { 0,       0,       1/ 2.f,  0      }},
-        // k=12: C[12] weights
-        {{ 1/36.f, -1/ 6.f,  1/12.f,  1/18.f},
-         {-1/ 6.f,  1.0f,   -1/ 2.f, -1/ 3.f},
-         { 1/12.f, -1/ 2.f,  1/ 4.f,  1/ 6.f},
-         { 1/18.f, -1/ 3.f,  1/ 6.f,  1/ 9.f}},
-        // k=13: C[13] weights
-        {{ 0,       0,       0,       0      },
-         { 0,       0,       0,       0      },
-         { 1/ 6.f, -1.0f,    1/ 2.f,  1/ 3.f},
-         { 0,       0,       0,       0      }},
-        // k=14: C[14] weights
-        {{ 0,       0,       1/ 6.f,  0      },
-         { 0,       0,      -1.0f,    0      },
-         { 0,       0,       1/ 2.f,  0      },
-         { 0,       0,       1/ 3.f,  0      }},
-        // k=15: C[15] weights
-        {{ 0,       0,       0,       0      },
-         { 0,       0,       0,       0      },
-         { 0,       0,       1.0f,    0      },
-         { 0,       0,       0,       0      }}
+    auto cubic_weight = [](float x) -> float
+    {
+        x = std::abs(x);
+        if(x <= 1.0f)
+            return ((1.5f * x - 2.5f) * x * x) + 1.0f;
+        if(x < 2.0f)
+            return (((-0.5f * x + 2.5f) * x - 4.0f) * x) + 2.0f;
+        return 0.0f;
+    };
+    auto cubic_derivative = [](float x) -> float
+    {
+        float sign = (x < 0.0f) ? -1.0f : 1.0f;
+        x = std::abs(x);
+
+        if(x <= 1.0f)
+            return sign * (4.5f * x * x - 5.0f * x);
+        if(x < 2.0f)
+            return sign * (-1.5f * x * x + 5.0f * x - 4.0f);
+        return 0.0f;
     };
 
-    // --- Gamma from W ---
-    float Gamma[5][5][16] = {};
-    for(int m = -2; m <= 2; m++)
-        for(int n = -2; n <= 2; n++)
-            for(int k = 0; k < 16; k++)
-                for(int a = -1; a <= 2; a++)
-                    for(int b = -1; b <= 2; b++)
-                        Gamma[m + 2][n + 2][k] +=
-                            W[k][a + 1][b + 1] * R[m + a + 3][n + b + 3];
-
-    float gamma_scale = phi[2*5+2] / Gamma[2][2][15];
-    for(int m = 0; m < 5; m++)
-        for(int n = 0; n < 5; n++)
-            for(int k = 0; k < 16; k++)
-                Gamma[m][n][k] *= gamma_scale;
-
-    static int debug_count = 0;
-    if(debug_count > 100000 && debug_count < 100008) 
-    {
-        printf("\n=== Window %d ===\n", debug_count);
-        printf("int_u=%d int_v=%d gauss_u=%.4f gauss_v=%.4f\n", int_u, int_v, gauss_u, gauss_v);
-        printf("phi center: %.6f\n", phi[2*5+2]);
-        printf("phi neighbors: %.6f %.6f %.6f %.6f\n", phi[1*5+2], phi[3*5+2], phi[2*5+1], phi[2*5+3]);
-        printf("R(0,0)=%.6f R(1,0)=%.6f R(0,1)=%.6f\n", R[4][4], R[5][4], R[4][5]);
-        printf("Gamma[2][2][15]=%.6f\n", Gamma[2][2][15]);
-    }
-    debug_count++;
-
     t_gamma += std::chrono::duration<double>(clk::now() - t0).count();
-    t0 = clk::now();
 
-    // Step 5: Newton-Raphson minimization of residue eq.(9).
-    // Seeded by Gaussian sub-pixel estimate -- already close to the minimum,
-    // ensures convergence in 3-5 iterations.
-    // Only the sub-pixel fractional part (offset from integer peak) is needed.
-
-    float up = gauss_u; //Defined above
-    float vp = gauss_v; //^
-
-    // Newton-Raphson loop: at each step compute gradient (g_u, g_v) and
-    // Hessian (H_uu, H_vv, H_uv) of eps(u',v') from eq.(9) analytically,
-    // then solve the 2x2 system H*delta = -g via Cramer's rule.
-    // Derivatives of basis_k computed by power rule from eq.(6) term order.
-    for(int iter = 0; iter < 10; iter++)
+    struct EvalResult
     {
-        float eu = 1.0f - vp, ev = 1.0f - up;
-        float eu2 = eu*eu, eu3 = eu2*eu;
-        float ev2 = ev*ev, ev3 = ev2*ev;
+        float eps = 1e30f;
+        float g_u = 0.0f;
+        float g_v = 0.0f;
+        float H_uu = 0.0f;
+        float H_uv = 0.0f;
+        float H_vv = 0.0f;
+    };
 
-        float B[16]   = {eu3*ev3, eu3*ev2, eu2*ev3, eu2*ev2, eu3*ev,  eu*ev3, eu3, ev3,
-                        eu2*ev,  eu*ev2,  eu2,     ev2,     eu*ev,   eu,     ev,  1.0f};
-        float Bu[16]  = {-3*eu2*ev3, -3*eu2*ev2, -2*eu*ev3, -2*eu*ev2, -3*eu2*ev, -ev3, -3*eu2, 0,
-                        -2*eu*ev,   -ev2,       -2*eu,      0,         -ev,       -1,    0,      0};
-        float Bv[16]  = {-3*eu3*ev2, -2*eu3*ev, -3*eu2*ev2, -2*eu2*ev, -eu3, -3*eu*ev2, 0, -3*ev2,
-                        -eu2,       -2*eu*ev,   0,          -2*ev,     -eu,   0,        -1,  0};
-        float Buu[16] = {6*eu*ev3, 6*eu*ev2, 2*ev3, 2*ev2, 6*eu*ev, 0, 6*eu, 0,
-                        2*ev,     0,        2,     0,     0,       0,  0,    0};
-        float Bvv[16] = {6*eu3*ev, 2*eu3, 6*eu2*ev, 2*eu2, 0, 6*eu*ev, 0, 6*ev,
-                        0,        2*eu,  0,        2,     0, 0,       0,  0};
-        float Buv[16] = {9*eu2*ev2, 6*eu2*ev, 6*eu*ev2, 4*eu*ev, 3*eu2, 3*ev2, 0, 0,
-                        2*eu,      2*ev,     0,         0,       1,     0,     0, 0};
+    struct CellSolution
+    {
+        float du = 0.0f;
+        float dv = 0.0f;
+        float eps = 1e30f;
+        int int_u = 0;
+        int int_v = 0;
+        int row = 0;
+        int col = 0;
+        bool valid = false;
+    };
 
-        float g_u = 0, g_v = 0, H_uu = 0, H_vv = 0, H_uv = 0;
+    constexpr float lock_threshold = 0.47f;
 
-        for(int m = -2; m <= 2; m++) {
-            for(int n = -2; n <= 2; n++) {
-                const float* G = Gamma[m + 2][n + 2];
-                float pv = 0, pu = 0, pv_ = 0, puu = 0, pvv = 0, puv = 0;
-                for(int k = 0; k < 16; k++) {
-                    pv  += G[k] * B[k];    pu  += G[k] * Bu[k];
-                    pv_ += G[k] * Bv[k];   puu += G[k] * Buu[k];
-                    pvv += G[k] * Bvv[k];  puv += G[k] * Buv[k];
+    auto offset_extent = [](float du, float dv)
+    {
+        return std::max(std::abs(du), std::abs(dv));
+    };
+
+    auto better_cell = [&](const CellSolution& candidate, const CellSolution& current)
+    {
+        constexpr float eps_tol = 5e-4f;
+
+        if(!candidate.valid)
+            return false;
+        if(!current.valid)
+            return true;
+        if(candidate.eps + eps_tol < current.eps)
+            return true;
+        if(std::abs(candidate.eps - current.eps) > eps_tol)
+            return false;
+
+        float cand_extent = offset_extent(candidate.du, candidate.dv);
+        float current_extent = offset_extent(current.du, current.dv);
+        bool cand_locked = cand_extent > lock_threshold;
+        bool current_locked = current_extent > lock_threshold;
+
+        if(current_locked && !cand_locked)
+            return true;
+
+        return cand_extent + 1e-4f < current_extent;
+    };
+
+    auto solve_cell = [&](int cell_row, int cell_col, bool use_hint, float hint_u, float hint_v) -> CellSolution
+    {
+        CellSolution solution;
+        if(cell_row <= 1 || cell_row >= ccmap.rows() - 2 || cell_col <= 1 || cell_col >= ccmap.cols() - 2)
+            return solution;
+
+        solution.row = cell_row;
+        solution.col = cell_col;
+        solution.int_u = cell_col - ccmap.cols() / 2;
+        solution.int_v = cell_row - ccmap.rows() / 2;
+
+        float gauss_u = 0.0f;
+        float gauss_v = 0.0f;
+
+        if(ccmap(cell_row, cell_col - 1) > 0 && ccmap(cell_row, cell_col) > 0 && ccmap(cell_row, cell_col + 1) > 0)
+            gauss_u = std::clamp(
+                cell_col + (std::log(ccmap(cell_row, cell_col - 1)) - std::log(ccmap(cell_row, cell_col + 1)))
+                    / (2 * std::log(ccmap(cell_row, cell_col - 1)) - 4 * std::log(ccmap(cell_row, cell_col))
+                    + 2 * std::log(ccmap(cell_row, cell_col + 1)))
+                - static_cast<float>(cell_col), -0.49f, 0.49f);
+
+        if(ccmap(cell_row - 1, cell_col) > 0 && ccmap(cell_row, cell_col) > 0 && ccmap(cell_row + 1, cell_col) > 0)
+            gauss_v = std::clamp(
+                cell_row + (std::log(ccmap(cell_row - 1, cell_col)) - std::log(ccmap(cell_row + 1, cell_col)))
+                    / (2 * std::log(ccmap(cell_row - 1, cell_col)) - 4 * std::log(ccmap(cell_row, cell_col))
+                    + 2 * std::log(ccmap(cell_row + 1, cell_col)))
+                - static_cast<float>(cell_row), -0.49f, 0.49f);
+
+        if(!std::isfinite(gauss_u)) gauss_u = 0.0f;
+        if(!std::isfinite(gauss_v)) gauss_v = 0.0f;
+
+        auto phi_t0 = clk::now();
+        float phi[25] = {};
+        for(int m = -2; m <= 2; m++)
+            for(int n = -2; n <= 2; n++)
+                phi[(m + 2) * 5 + (n + 2)] = ccmap(cell_row + m, cell_col + n);
+        t_phi += std::chrono::duration<double>(clk::now() - phi_t0).count();
+
+        const float phi_mean = std::accumulate(std::begin(phi), std::end(phi), 0.0f) / 25.0f;
+        if(std::abs(phi_mean) < 1e-8f)
+            return solution;
+
+        float phi_norm[25] = {};
+        for(int idx = 0; idx < 25; idx++)
+            phi_norm[idx] = phi[idx] / phi_mean;
+
+        auto evaluate = [&](float du, float dv) -> EvalResult
+        {
+            struct Basis1D
+            {
+                int base = 0;
+                float w[4] = {};
+                float dw[4] = {};
+            };
+
+            auto build_basis = [&](Basis1D (&basis)[5], float shift)
+            {
+                for(int i = 0; i < 5; i++)
+                {
+                    float pos = static_cast<float>(i - 2) - shift;
+                    int base = static_cast<int>(std::floor(pos));
+                    basis[i].base = base;
+
+                    for(int k = 0; k < 4; k++)
+                    {
+                        float sample = static_cast<float>(base - 1 + k);
+                        float delta = pos - sample;
+                        basis[i].w[k] = cubic_weight(delta);
+                        basis[i].dw[k] = cubic_derivative(delta);
+                    }
                 }
-                float r = phi[(m + 2) * 5 + (n + 2)] - pv;
-                g_u  += -2.0f * r * pu;
-                g_v  += -2.0f * r * pv_;
-                H_uu += 2.0f * pu * pu   - 2.0f * r * puu;
-                H_vv += 2.0f * pv_ * pv_ - 2.0f * r * pvv;
-                H_uv += 2.0f * pu * pv_  - 2.0f * r * puv;
+            };
+
+            Basis1D x_basis[5];
+            Basis1D y_basis[5];
+            build_basis(x_basis, du);
+            build_basis(y_basis, dv);
+
+            float pred[25] = {};
+            float pred_du[25] = {};
+            float pred_dv[25] = {};
+            float pred_mean = 0.0f;
+            float pred_du_mean = 0.0f;
+            float pred_dv_mean = 0.0f;
+
+            int idx = 0;
+            for(int m = 0; m < 5; m++)
+            {
+                const Basis1D& yb = y_basis[m];
+                for(int n = 0; n < 5; n++)
+                {
+                    const Basis1D& xb = x_basis[n];
+                    float value = 0.0f;
+                    float dx = 0.0f;
+                    float dy = 0.0f;
+
+                    for(int ky = 0; ky < 4; ky++)
+                    {
+                        int ry = yb.base - 1 + ky + 4;
+                        float wy = yb.w[ky];
+                        float dwy = yb.dw[ky];
+
+                        for(int kx = 0; kx < 4; kx++)
+                        {
+                            int rx = xb.base - 1 + kx + 4;
+                            float rv = R[ry][rx];
+                            float wx = xb.w[kx];
+                            float dwx = xb.dw[kx];
+
+                            value += rv * wy * wx;
+                            dx += rv * wy * dwx;
+                            dy += rv * dwy * wx;
+                        }
+                    }
+
+                    pred[idx] = value;
+                    pred_du[idx] = -dx;
+                    pred_dv[idx] = -dy;
+                    pred_mean += pred[idx];
+                    pred_du_mean += pred_du[idx];
+                    pred_dv_mean += pred_dv[idx];
+                    idx++;
+                }
+            }
+
+            pred_mean /= 25.0f;
+            pred_du_mean /= 25.0f;
+            pred_dv_mean /= 25.0f;
+
+            EvalResult out;
+            if(std::abs(pred_mean) < 1e-8f)
+                return out;
+            out.eps = 0.0f;
+
+            for(int idx = 0; idx < 25; idx++)
+            {
+                float pred_norm = pred[idx] / pred_mean;
+                float pred_norm_du = (pred_du[idx] * pred_mean - pred[idx] * pred_du_mean)
+                                   / (pred_mean * pred_mean);
+                float pred_norm_dv = (pred_dv[idx] * pred_mean - pred[idx] * pred_dv_mean)
+                                   / (pred_mean * pred_mean);
+
+                float r = phi_norm[idx] - pred_norm;
+
+                out.eps += r * r;
+                out.g_u += -2.0f * r * pred_norm_du;
+                out.g_v += -2.0f * r * pred_norm_dv;
+                out.H_uu += 2.0f * pred_norm_du * pred_norm_du;
+                out.H_uv += 2.0f * pred_norm_du * pred_norm_dv;
+                out.H_vv += 2.0f * pred_norm_dv * pred_norm_dv;
+            }
+            return out;
+        };
+
+        auto solve_t0 = clk::now();
+
+        float best_u = std::clamp(gauss_u, -0.49f, 0.49f);
+        float best_v = std::clamp(gauss_v, -0.49f, 0.49f);
+        EvalResult best = evaluate(best_u, best_v);
+
+        if(use_hint)
+        {
+            float hinted_u = std::clamp(hint_u, -0.49f, 0.49f);
+            float hinted_v = std::clamp(hint_v, -0.49f, 0.49f);
+            EvalResult hinted = evaluate(hinted_u, hinted_v);
+            if(hinted.eps < best.eps)
+            {
+                best_u = hinted_u;
+                best_v = hinted_v;
+                best = hinted;
             }
         }
 
-        // Solve 2x2 system H*delta = -g via Cramer's rule
-        float det = H_uu * H_vv - H_uv * H_uv;
-        if(std::abs(det) < 1e-10f) break;
+        EvalResult centered = evaluate(0.0f, 0.0f);
+        if(centered.eps < best.eps)
+        {
+            best_u = 0.0f;
+            best_v = 0.0f;
+            best = centered;
+        }
 
-        float delta_u = (-g_u * H_vv + g_v * H_uv) / det;
-        float delta_v = (-g_v * H_uu + g_u * H_uv) / det;
+        auto search_grid = [&](float u_min, float u_max, float v_min, float v_max, float step)
+        {
+            u_min = std::clamp(u_min, -0.49f, 0.49f);
+            u_max = std::clamp(u_max, -0.49f, 0.49f);
+            v_min = std::clamp(v_min, -0.49f, 0.49f);
+            v_max = std::clamp(v_max, -0.49f, 0.49f);
 
-        up = std::clamp(up + delta_u, 0.0f, 0.99f);
-        vp = std::clamp(vp + delta_v, 0.0f, 0.99f);
+            if(u_min > u_max || v_min > v_max)
+                return;
 
-        if(debug_count > 100000 & debug_count < 100008)
-            printf("iter=%d up=%.6f vp=%.6f det=%.6e delta_u=%.6f delta_v=%.6f\n",
-                iter, up, vp, det, delta_u, delta_v);
+            int u_steps = static_cast<int>(std::floor((u_max - u_min) / step + 0.5f));
+            int v_steps = static_cast<int>(std::floor((v_max - v_min) / step + 0.5f));
 
-        // Converged when step smaller than 0.0001px
-        if(std::abs(delta_u) < 1e-4f && std::abs(delta_v) < 1e-4f) break;
+            for(int ui = 0; ui <= u_steps; ui++)
+            {
+                float du = std::min(0.49f, u_min + ui * step);
+                for(int vi = 0; vi <= v_steps; vi++)
+                {
+                    float dv = std::min(0.49f, v_min + vi * step);
+                    EvalResult candidate = evaluate(du, dv);
+                    if(candidate.eps < best.eps)
+                    {
+                        best_u = du;
+                        best_v = dv;
+                        best = candidate;
+                    }
+                }
+            }
+        };
+
+        bool improved = false;
+        for(int iter = 0; iter < 8; iter++)
+        {
+            float det = best.H_uu * best.H_vv - best.H_uv * best.H_uv;
+            if(std::abs(det) < 1e-10f)
+                break;
+
+            float delta_u = (-best.g_u * best.H_vv + best.g_v * best.H_uv) / det;
+            float delta_v = (-best.g_v * best.H_uu + best.g_u * best.H_uv) / det;
+
+            delta_u = std::clamp(delta_u, -0.25f, 0.25f);
+            delta_v = std::clamp(delta_v, -0.25f, 0.25f);
+
+            bool accepted = false;
+            for(float alpha : {1.0f, 0.5f, 0.25f, 0.1f, 0.05f})
+            {
+                float cand_u = std::clamp(best_u + alpha * delta_u, -0.49f, 0.49f);
+                float cand_v = std::clamp(best_v + alpha * delta_v, -0.49f, 0.49f);
+                EvalResult candidate = evaluate(cand_u, cand_v);
+                if(candidate.eps < best.eps)
+                {
+                    best_u = cand_u;
+                    best_v = cand_v;
+                    best = candidate;
+                    improved = true;
+                    accepted = true;
+                    break;
+                }
+            }
+
+            if(!accepted || (std::abs(delta_u) < 1e-4f && std::abs(delta_v) < 1e-4f))
+                break;
+        }
+
+        search_grid(best_u - 0.01f, best_u + 0.01f, best_v - 0.01f, best_v + 0.01f, 0.005f);
+
+        bool invalid_solution = !std::isfinite(best.eps) || best.eps >= 1e29f;
+        bool near_boundary = offset_extent(best_u, best_v) > 0.45f;
+        if(!improved && (invalid_solution || near_boundary))
+        {
+            search_grid(-0.49f, 0.49f, -0.49f, 0.49f, 0.05f);
+            search_grid(best_u - 0.05f, best_u + 0.05f, best_v - 0.05f, best_v + 0.05f, 0.01f);
+        }
+
+        t_nr += std::chrono::duration<double>(clk::now() - solve_t0).count();
+
+        solution.du = best_u;
+        solution.dv = best_v;
+        solution.eps = best.eps;
+        solution.valid = std::isfinite(best.eps) && best.eps < 1e29f;
+        return solution;
+    };
+
+    CellSolution best_cell = solve_cell(row, col, false, 0.0f, 0.0f);
+    if(!best_cell.valid)
+    {
+        best_cell.valid = true;
+        best_cell.row = row;
+        best_cell.col = col;
+        best_cell.int_u = col - ccmap.cols() / 2;
+        best_cell.int_v = row - ccmap.rows() / 2;
     }
 
-    float u = int_u + up;
-    float v = int_v + vp;
+    for(int handoff_iter = 0; handoff_iter < 2 && best_cell.valid; handoff_iter++)
+    {
+        int u_offsets[2] = {0, 0};
+        int v_offsets[2] = {0, 0};
+        int u_count = 1;
+        int v_count = 1;
 
-    t_nr += std::chrono::duration<double>(clk::now() - t0).count();
-    
-    //SCC PPR singal to noise ratio calculations
+        if(best_cell.du > lock_threshold) u_offsets[u_count++] = 1;
+        else if(best_cell.du < -lock_threshold) u_offsets[u_count++] = -1;
+
+        if(best_cell.dv > lock_threshold) v_offsets[v_count++] = 1;
+        else if(best_cell.dv < -lock_threshold) v_offsets[v_count++] = -1;
+
+        bool moved = false;
+        CellSolution handoff_best = best_cell;
+
+        for(int vi = 0; vi < v_count; vi++)
+        {
+            for(int ui = 0; ui < u_count; ui++)
+            {
+                int du_offset = u_offsets[ui];
+                int dv_offset = v_offsets[vi];
+                if(du_offset == 0 && dv_offset == 0)
+                    continue;
+
+                int candidate_row = best_cell.row + dv_offset;
+                int candidate_col = best_cell.col + du_offset;
+
+                CellSolution candidate = solve_cell(candidate_row, candidate_col, true,
+                                                    best_cell.du - static_cast<float>(du_offset),
+                                                    best_cell.dv - static_cast<float>(dv_offset));
+                if(better_cell(candidate, handoff_best))
+                {
+                    handoff_best = candidate;
+                    moved = true;
+                }
+            }
+        }
+
+        if(!moved)
+            break;
+
+        best_cell = handoff_best;
+    }
+
+    row = best_cell.row;
+    col = best_cell.col;
+    float u = best_cell.int_u + best_cell.du;
+    float v = best_cell.int_v + best_cell.dv;
+
     Eigen::MatrixXf ccmap_flattened = ccmap.array() - ccmap.minCoeff();
-
-    //Get the peak on the subtracted plane
-    peak = ccmap_flattened.maxCoeff();
+    peak = ccmap_flattened(row, col);
 
     int mask_size = 5;
     int r0 = std::max(0, row - mask_size);
@@ -607,11 +739,6 @@ int PIV::GetOverlap() const
     return overlap;
 }
 
-int PIV::GetSearchSize() const
-{
-    return search_size;
-}
-
 void PIV::SetWindowSize(const int size)
 {
     window_size = size;
@@ -620,12 +747,4 @@ void PIV::SetWindowSize(const int size)
 void PIV::SetOverlap(const int overlap)
 {
     this->overlap = overlap;
-}
-
-void PIV::SetSearchSize(const int size)
-{
-    search_size = size;
-
-    FreeFFTBuffers();
-    AllocateFFTBuffers();
 }

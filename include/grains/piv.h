@@ -27,7 +27,7 @@ public:
     PIV();
 
     /// @brief Construct with explicit window parameters.
-    PIV(const int window_size, const int overlap, const int search_size);
+    PIV(const int window_size, const int overlap);
 
     /// @brief Construct from a PIVParameters struct.
     PIV(const PIVParameters parameters);
@@ -44,18 +44,13 @@ public:
 
     int GetWindowSize() const; ///< Interrogation window side length (pixels).
     int GetOverlap()    const; ///< Window overlap (pixels).
-    int GetSearchSize() const; ///< Search region side length (pixels).
-
     /// @brief Resize FFTW buffers and rebuild plans for a new window size.
     void SetWindowSize(const int size);
     void SetOverlap(const int overlap);
-    /// @brief Resize FFTW buffers and rebuild plans for a new search size.
-    void SetSearchSize(const int size);
 
 private:
     int window_size = 64;
     int overlap     = 50;
-    int search_size = 72;
 
     // FFTW preallocated buffers, assigned in constructor
     float*         ref_in    = nullptr;
@@ -74,18 +69,18 @@ private:
     fftwf_plan flow_plan = nullptr;
     fftwf_plan inv_plan  = nullptr;
 
-    Eigen::MatrixXf hann2d; ///< Pre-computed 2-D Hann window applied to each interrogation window.
-
     void AllocateFFTBuffers();
     void FreeFFTBuffers();
 
     /// @brief Direct spatial cross-correlation (used for small windows or validation).
-    Eigen::MatrixXf CrossCorrelationSpatial(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow);
+    Eigen::MatrixXf CrossCorrelationSpatial(const Eigen::Ref<const Eigen::MatrixXf>& w_reference,
+                                           const Eigen::Ref<const Eigen::MatrixXf>& w_flow);
 
     /// @brief FFT-based normalised cross-correlation (primary path).
-    Eigen::MatrixXf CrossCorrelationFFT(const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow);
+    Eigen::MatrixXf CrossCorrelationFFT(const Eigen::Ref<const Eigen::MatrixXf>& w_reference,
+                                       const Eigen::Ref<const Eigen::MatrixXf>& w_flow);
 
     /// @brief Locate the cross-correlation peak and compute sub-pixel position and S2N.
-    PeakResult FindPeak(const Eigen::MatrixXf& ccmap, const Eigen::MatrixXf& w_reference, const Eigen::MatrixXf& w_flow,
+    PeakResult FindPeak(const Eigen::MatrixXf& ccmap,
                         double& t_patch, double& t_phi, double& t_R, double& t_gamma, double& t_nr);
 };

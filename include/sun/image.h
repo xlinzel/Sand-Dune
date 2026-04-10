@@ -37,6 +37,8 @@ public:
 
 private:
     bool loaded = false;
-    int width, height, channels;
+    int width = 0;
+    int height = 0;
+    int channels = 0;
     std::vector<unsigned char> data;
 };

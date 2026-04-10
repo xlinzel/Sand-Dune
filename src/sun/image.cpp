@@ -14,6 +14,10 @@ std::string Image::Load(const char* filename)
     if (!raw) //Error check for invalid image data return
     {
         loaded = false;
+        width = 0;
+        height = 0;
+        channels = 0;
+        data.clear();
         return std::string("Failed to return image data: ") + filename;
     }
     
