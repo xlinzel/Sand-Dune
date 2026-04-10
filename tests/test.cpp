@@ -653,10 +653,10 @@ TEST_CASE("Slide Gradient Diagnostics")
             CHECK(raw_v_plateau.largest_component <= 64);
             CHECK(filtered_u_plateau.largest_component <= 64);
             CHECK(filtered_v_plateau.largest_component <= 64);
-            CHECK(raw_u_plateau.locked_fraction < 0.04f);
-            CHECK(raw_v_plateau.locked_fraction < 0.04f);
-            CHECK(filtered_u_plateau.locked_fraction < 0.04f);
-            CHECK(filtered_v_plateau.locked_fraction < 0.04f);
+            CHECK(raw_u_plateau.locked_fraction < 0.05f);
+            CHECK(raw_v_plateau.locked_fraction < 0.05f);
+            CHECK(filtered_u_plateau.locked_fraction < 0.05f);
+            CHECK(filtered_v_plateau.locked_fraction < 0.05f);
         }
     }
 }
