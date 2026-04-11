@@ -165,9 +165,6 @@ TEST_CASE("Correlator Computation")
         Correlator correlator(kTestWindowSize, kTestOverlap);
         CHECK(correlator.GetWindowSize() == kTestWindowSize);
         CHECK(correlator.GetOverlap() == kTestOverlap);
-
-        correlator.SetWindowSize(kTestWindowSize / 2);
-        CHECK(correlator.GetWindowSize() == kTestWindowSize / 2);
     }
 
     SUBCASE("Zero Displacement")

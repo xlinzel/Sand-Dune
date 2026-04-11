@@ -20,7 +20,6 @@ public:
     void DrawParametersPanel();
     void DrawCalculationsPanel();
     void DrawPipelinePanel();
-    void DrawCalcualtionsPanel();
     void DrawVisualizationPanel();
 
     void DrawCorrelation();
@@ -51,7 +50,6 @@ private:
     //Original Images
     SDL_Texture* ref_tex = nullptr;
     SDL_Texture* flow_tex = nullptr;
-    SDL_Texture* surface_tex = nullptr;
 
     //Generated Images and tracking
     std::vector<SDL_Texture*> correlation_textures = {nullptr, nullptr, nullptr};
@@ -76,6 +74,5 @@ private:
     bool save_dir_dialog_open = false;
 
     //Background image rendering
-    SDL_Surface* surf = nullptr;
     SDL_Texture* texture_bg = nullptr;
 };

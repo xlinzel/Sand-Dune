@@ -2,8 +2,7 @@
 #include <algorithm>
 #include <fftw3.h>
 #include <cmath>
-#include <chrono>
-#include <numeric>
+#include <cstring>
 
 
 //////////////////////////////////////////////////////
@@ -82,16 +81,15 @@ VectorField Correlator::Compute(const Eigen::MatrixXf& reference, const Eigen::M
         return VectorField();
     }
 
+    if(window_size <= 1 || overlap < 0 || overlap >= window_size)
+        return VectorField();
+
     int movement = window_size - overlap;
     int num_rows = floor(ref_size(0) / movement);
     int num_cols = floor(ref_size(1) / movement);
 
     int total_windows = num_rows * num_cols;
     int completed = 0;
-
-    // Profiling accumulators -- remove after tuning
-    double t_patch = 0, t_phi = 0, t_R = 0, t_gamma = 0, t_nr = 0;
-    int window_count = 0;
 
     VectorField vectorfield(num_rows, num_cols);
     Eigen::MatrixXf padded_reference(window_size, window_size);
@@ -126,8 +124,7 @@ VectorField Correlator::Compute(const Eigen::MatrixXf& reference, const Eigen::M
 
                 Eigen::MatrixXf ccmap = CrossCorrelationFFT(ref_window, flow_window);
 
-                PeakResult peak = FindPeak(ccmap, t_patch, t_phi, t_R, t_gamma, t_nr);
-                window_count++;
+                PeakResult peak = FindPeak(ccmap);
                 vectorfield.u(win_row, win_col) = peak.u;
                 vectorfield.v(win_row, win_col) = peak.v;
                 vectorfield.s2n(win_row, win_col) = peak.s2n;
@@ -153,8 +150,7 @@ VectorField Correlator::Compute(const Eigen::MatrixXf& reference, const Eigen::M
 
                 Eigen::MatrixXf ccmap = CrossCorrelationFFT(padded_reference, padded_flow);
 
-                PeakResult peak = FindPeak(ccmap, t_patch, t_phi, t_R, t_gamma, t_nr);
-                window_count++;
+                PeakResult peak = FindPeak(ccmap);
                 vectorfield.u(win_row, win_col) = peak.u;
                 vectorfield.v(win_row, win_col) = peak.v;
                 vectorfield.s2n(win_row, win_col) = peak.s2n;
@@ -162,22 +158,6 @@ VectorField Correlator::Compute(const Eigen::MatrixXf& reference, const Eigen::M
 
             if(on_progress) on_progress(++completed / (float)total_windows);
         }
-    }
-
-    // Keep optional FindPeak profiling available for debugging, but leave it
-    // disabled during normal runs because the timing dump floods the console.
-    constexpr bool kPrintFindPeakTiming = false;
-    if(kPrintFindPeakTiming && window_count > 0)
-    {
-        double total = t_patch + t_phi + t_R + t_gamma + t_nr;
-        printf("\n--- FindPeak timing over %d windows ---\n", window_count);
-        printf("Patch extraction:  %6.2f ms  (%4.1f%%)\n", t_patch*1e3,  100*t_patch/total);
-        printf("Local phi:         %6.2f ms  (%4.1f%%)\n", t_phi*1e3,    100*t_phi/total);
-        printf("Autocorr R:        %6.2f ms  (%4.1f%%)\n", t_R*1e3,      100*t_R/total);
-        printf("Interp prep:       %6.2f ms  (%4.1f%%)\n", t_gamma*1e3,  100*t_gamma/total);
-        printf("Subpixel search:   %6.2f ms  (%4.1f%%)\n", t_nr*1e3,     100*t_nr/total);
-        printf("Total in FindPeak: %6.2f ms\n", total*1e3);
-        printf("Per window:        %6.4f ms\n", total*1e3/window_count);
     }
 
     return vectorfield;
@@ -284,11 +264,6 @@ int Correlator::GetWindowSize() const
 int Correlator::GetOverlap() const
 {
     return overlap;
-}
-
-void Correlator::SetWindowSize(const int size)
-{
-    window_size = size;
 }
 
 void Correlator::SetOverlap(const int overlap)

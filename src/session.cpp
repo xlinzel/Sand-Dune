@@ -1,10 +1,11 @@
 #include <session.h>
+#include <algorithm>
 
 Session::Session()
 {
-    stagestates[STAGE_CORRELATION] = Idle;
-    stagestates[STAGE_VAL] = Idle;
-    stagestates[STAGE_RECON] = Idle;
+    stagestates[STAGE_CORRELATION].store(Idle);
+    stagestates[STAGE_VAL].store(Idle);
+    stagestates[STAGE_RECON].store(Idle);
 }
 
 Session::~Session()
@@ -19,7 +20,7 @@ void Session::LoadRef(const std::string& path)
     ref_path = path;
     ref.Load(path.c_str());
 
-    if(ref.GetLoaded() && !flows.empty() && flows[0].GetLoaded())
+    if(ref.GetLoaded() && HasFlow())
     {
         stagestates[STAGE_CORRELATION] = Ready;
     }
@@ -43,21 +44,31 @@ void Session::LoadFlow(const std::vector<std::string>& paths)
     raw_surface.clear();   surface.clear();
     active_index = 0;
 
-    for(int i = 0; i < paths.size(); i++)
+    for(int i = 0; i < static_cast<int>(paths.size()); i++)
         flows[i].Load(paths[i].c_str());
 
-    if(ref.GetLoaded() && !flows.empty() && flows[0].GetLoaded())
-      {
-          stagestates[STAGE_CORRELATION] = Ready;
-          posx = flows[0].GetWidth()  / 2;
-          posy = flows[0].GetHeight() / 2;
-      }
+    bool all_loaded = !flows.empty()
+                   && std::all_of(flows.begin(), flows.end(), [](const Image& image)
+                      {
+                          return image.GetLoaded();
+                      });
+
+    if(ref.GetLoaded() && all_loaded)
+    {
+        stagestates[STAGE_CORRELATION] = Ready;
+        posx = flows[0].GetWidth()  / 2;
+        posy = flows[0].GetHeight() / 2;
+    }
 }
 
 void Session::RunCorrelation()
 {
-    if(stagestates[STAGE_CORRELATION] == Idle)
+    if(GetStageState(STAGE_CORRELATION) == Idle)
         return;
+
+    stagestates[STAGE_CORRELATION] = Busy;
+    if(GetStageState(STAGE_VAL)   == Done) stagestates[STAGE_VAL]   = Dirty;
+    if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
     Correlator correlator(correlatorparameters);
     raw_correlation_field.resize(flows.size());
@@ -74,8 +85,11 @@ void Session::RunCorrelation()
 
 void Session::RunValidation()
 {
-    if(stagestates[STAGE_VAL] == Idle)
+    if(GetStageState(STAGE_VAL) == Idle)
         return;
+
+    stagestates[STAGE_VAL] = Busy;
+    if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
     Validation post;
     raw_val_field.resize(raw_correlation_field.size());
@@ -93,8 +107,10 @@ void Session::RunValidation()
 
 void Session::RunReconstruction()
 {
-    if(stagestates[STAGE_RECON] == Idle)
+    if(GetStageState(STAGE_RECON) == Idle)
         return;
+
+    stagestates[STAGE_RECON] = Busy;
 
     if(n_calibration)
     {
@@ -123,12 +139,12 @@ bool Session::IsRunning() const
 
 void Session::RunCorrelationAsync()
 {
-    if(stagestates[STAGE_CORRELATION] == Idle || IsRunning())
+    if(GetStageState(STAGE_CORRELATION) == Idle || IsRunning())
         return;
 
     stagestates[STAGE_CORRELATION] = Busy;
-    if(stagestates[STAGE_VAL]   == Done) stagestates[STAGE_VAL]   = Dirty;
-    if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
+    if(GetStageState(STAGE_VAL)   == Done) stagestates[STAGE_VAL]   = Dirty;
+    if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
     progress = 0.0f;
     task_start = std::chrono::steady_clock::now();
@@ -157,11 +173,11 @@ void Session::RunCorrelationAsync()
 
 void Session::RunValidationAsync()
 {
-    if(stagestates[STAGE_VAL] == Idle || IsRunning())
+    if(GetStageState(STAGE_VAL) == Idle || IsRunning())
         return;
 
     stagestates[STAGE_VAL] = Busy;
-    if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
+    if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
     progress = 0.0f;
     task_start = std::chrono::steady_clock::now();
@@ -188,7 +204,7 @@ void Session::RunValidationAsync()
 
 void Session::RunReconstructionAsync()
 {
-    if(stagestates[STAGE_RECON] == Idle || IsRunning())
+    if(GetStageState(STAGE_RECON) == Idle || IsRunning())
         return;
 
     stagestates[STAGE_RECON] = Busy;
@@ -197,7 +213,7 @@ void Session::RunReconstructionAsync()
     {
         if(mask_apply)
         {
-            float step = (float)(correlatorparameters.window_size - correlatorparameters.overlap);
+            float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
             mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
                 {posx / step, posy / step}, radius / step);
         }
@@ -236,7 +252,7 @@ void Session::RunReconstructionAsync()
 
 void Session::RunAllAsync()
 {
-    if(stagestates[STAGE_CORRELATION] == Idle || IsRunning())
+    if(GetStageState(STAGE_CORRELATION) == Idle || IsRunning())
         return;
 
     stagestates[STAGE_CORRELATION] = Busy;
@@ -283,7 +299,7 @@ void Session::RunAllAsync()
         // --- Reconstruction ---
         if(mask_apply)
         {
-            float step = (float)(correlatorparameters.window_size - correlatorparameters.overlap);
+            float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
             mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
                 {posx / step, posy / step}, radius / step);
         }
@@ -330,7 +346,7 @@ void Session::ComputeRefractionCorrection(int h, int w)
     float t    = opticalparameters.t    * 1e-3f;
     float Z_B  = Z_a + Z_d;
     float z_i  = f * Z_B / (Z_B - f);
-    int   step = correlatorparameters.window_size - correlatorparameters.overlap;
+    int   step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
     float m1   = Z_a / z_i;
 
     correction[0] = Eigen::MatrixXf::Zero(h, w);
@@ -387,7 +403,7 @@ void Session::ComputeThicknessMap()
     float P_px = opticalparameters.P_px * 1e-6f;
     float Z_B  = Z_a + Z_d;
     float z_i  = f * Z_B / (Z_B - f);
-    int   step = correlatorparameters.window_size - correlatorparameters.overlap;
+    int   step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
     float m1   = Z_a / z_i;
     float n    = opticalparameters.n;
 
@@ -493,13 +509,13 @@ void Session::ScaleFields()
                         : (opticalparameters.n - 1.0f);         // thickness mode: divide by (n-1)
         term = std::max(term, 0.001f);
 
-        int step = correlatorparameters.window_size - correlatorparameters.overlap;
+        int step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
         scale = (float)step * opticalparameters.P_px * 1e-3
                 * (Z_B - opticalparameters.f)
                 / (opticalparameters.f * opticalparameters.Z_d * term);
     }
 
-    if(stagestates[STAGE_CORRELATION] != Idle && stagestates[STAGE_CORRELATION] != Ready)
+    if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
     {
         correlation_field.resize(raw_correlation_field.size());
         for(int i = 0; i < (int)raw_correlation_field.size(); i++)
@@ -512,7 +528,7 @@ void Session::ScaleFields()
         }
     }
 
-    if(stagestates[STAGE_VAL] != Idle && stagestates[STAGE_VAL] != Ready)
+    if(GetStageState(STAGE_VAL) != Idle && GetStageState(STAGE_VAL) != Ready)
     {
         val_field.resize(raw_val_field.size());
         for(int i = 0; i < (int)raw_val_field.size(); i++)
@@ -525,7 +541,7 @@ void Session::ScaleFields()
         }
     }
 
-    if(!n_calibration && stagestates[STAGE_RECON] != Idle && stagestates[STAGE_RECON] != Ready)
+    if(!n_calibration && GetStageState(STAGE_RECON) != Idle && GetStageState(STAGE_RECON) != Ready)
     {
         surface.resize(raw_surface.size());
         for(int i = 0; i < (int)raw_surface.size(); i++)
@@ -545,9 +561,9 @@ void Session::SaveAsync(const std::string& base_path)
 
     save_task = std::async(std::launch::async, [this, base_path]()
     {
-        if(stagestates[STAGE_CORRELATION] == Done) SaveCorrelationCSV(base_path + "_correlation.csv");
-        if(stagestates[STAGE_VAL]   == Done) SaveValCSV(base_path + "_val.csv");
-        if(stagestates[STAGE_RECON] == Done) SaveSurfaceCSV(base_path + "_surface.csv");
+        if(GetStageState(STAGE_CORRELATION) == Done) SaveCorrelationCSV(base_path + "_correlation.csv");
+        if(GetStageState(STAGE_VAL)   == Done) SaveValCSV(base_path + "_val.csv");
+        if(GetStageState(STAGE_RECON) == Done) SaveSurfaceCSV(base_path + "_surface.csv");
     });
 }
 
@@ -648,7 +664,14 @@ void Session::SetActiveIndex(int i)
 
 int Session::GetActiveIndex() const {return active_index;}
 
-bool Session::HasFlow() const       { return !flows.empty() && flows[0].GetLoaded(); }
+bool Session::HasFlow() const
+{
+    return !flows.empty()
+        && std::all_of(flows.begin(), flows.end(), [](const Image& image)
+           {
+               return image.GetLoaded();
+           });
+}
 
 int  Session::GetFlowCount() const  { return (int)flows.size(); }
 
@@ -671,5 +694,5 @@ const Eigen::MatrixXf& Session::GetSurface() const
 
 StageState Session::GetStageState(Stages s) const
 {
-    return stagestates[s];
+    return stagestates[s].load();
 }

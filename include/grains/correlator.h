@@ -45,15 +45,13 @@ public:
     /// @brief Compute the displacement field between @p reference and @p flow.
     /// @param reference  Normalised float image of the undisturbed background pattern.
     /// @param flow       Normalised float image of the disturbed background pattern.
-    /// @param on_progress Optional callback invoked with progress in [0, 1] after each row of windows.
+    /// @param on_progress Optional callback invoked with progress in [0, 1] after each window.
     /// @return VectorField containing per-window (u, v, s2n) values.
     VectorField Compute(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow,
                         std::function<void(float)> on_progress = nullptr);
 
     int GetWindowSize() const; ///< Interrogation window side length (pixels).
     int GetOverlap()    const; ///< Window overlap (pixels).
-    /// @brief Resize FFTW buffers and rebuild plans for a new window size.
-    void SetWindowSize(const int size);
     void SetOverlap(const int overlap);
 
 private:
@@ -97,6 +95,5 @@ private:
                                        const Eigen::Ref<const Eigen::MatrixXf>& w_flow);
 
     /// @brief Locate the cross-correlation peak and compute sub-pixel position and S2N.
-    PeakResult FindPeak(const Eigen::MatrixXf& ccmap,
-                        double& t_patch, double& t_phi, double& t_R, double& t_gamma, double& t_nr);
+    PeakResult FindPeak(const Eigen::MatrixXf& ccmap);
 };

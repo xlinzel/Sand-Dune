@@ -1,5 +1,17 @@
 #include <water/ui.h>
+#include <SDL3_image/SDL_image.h>
 #include <filesystem>
+
+namespace
+{
+SDL_Texture* LoadTextureFromPath(SDL_Renderer* renderer, const std::string& path)
+{
+    if(renderer == nullptr || path.empty())
+        return nullptr;
+
+    return IMG_LoadTexture(renderer, path.c_str());
+}
+}
 
 UI::UI(Session& session, SDL_Renderer* renderer)
     : session(session), renderer(renderer)
@@ -10,11 +22,10 @@ UI::UI(Session& session, SDL_Renderer* renderer)
 void UI::SetRenderer(SDL_Renderer* renderer)
 {
     this->renderer = renderer;
-    
-    surf = SDL_LoadPNG((std::string(PROJECT_DIR) + "/rsc/background.png").c_str());
-    texture_bg = SDL_CreateTextureFromSurface(renderer, surf);
-    SDL_SetTextureBlendMode(texture_bg, SDL_BLENDMODE_BLEND);
-    SDL_DestroySurface(surf);
+
+    if(texture_bg) SDL_DestroyTexture(texture_bg);
+    texture_bg = LoadTextureFromPath(renderer, std::string(PROJECT_DIR) + "/rsc/background.png");
+    if(texture_bg) SDL_SetTextureBlendMode(texture_bg, SDL_BLENDMODE_BLEND);
 }
 
 void UI::Draw()
@@ -65,10 +76,8 @@ void UI::DrawLoadPanel()
     {
         session.LoadRef(pending_ref_path);
 
-        surf = SDL_LoadBMP(pending_ref_path.c_str());
         if(ref_tex) SDL_DestroyTexture(ref_tex);
-        ref_tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_DestroySurface(surf);
+        ref_tex = LoadTextureFromPath(renderer, pending_ref_path);
 
         pending_ref_path.clear();
         file_dialog_open = false;
@@ -78,10 +87,8 @@ void UI::DrawLoadPanel()
     {
         session.LoadFlow(pending_flow_paths);
 
-        surf = SDL_LoadBMP(pending_flow_paths[0].c_str());
         if(flow_tex) SDL_DestroyTexture(flow_tex);
-        flow_tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_DestroySurface(surf);
+        flow_tex = session.HasFlow() ? LoadTextureFromPath(renderer, session.GetFlowPath()) : nullptr;
 
         pending_flow_paths.clear();
         file_dialog_open = false;
@@ -157,6 +164,8 @@ void UI::DrawLoadPanel()
       if(ImGui::Button("< Prev") && idx > 0)
       {
           session.SetActiveIndex(idx - 1);
+          if(flow_tex) SDL_DestroyTexture(flow_tex);
+          flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
           // Null textures so they rebuild for new active image
           for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
           for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
@@ -166,6 +175,8 @@ void UI::DrawLoadPanel()
       if(ImGui::Button("Next >") && idx < session.GetFlowCount() - 1)
       {
           session.SetActiveIndex(idx + 1);
+          if(flow_tex) SDL_DestroyTexture(flow_tex);
+          flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
           for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
           for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
           SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
@@ -189,8 +200,13 @@ void UI::DrawParametersPanel()
     ImGui::SeparatorText("Correlation Parameters");
     ImGui::PushItemWidth(-100.0f);
 
-    ImGui::SliderInt("Window Size", &session.correlatorparameters.window_size, 0, 164);
-    ImGui::SliderInt("Overlap", &session.correlatorparameters.overlap, 0, session.correlatorparameters.window_size - 2);
+    ImGui::SliderInt("Window Size", &session.correlatorparameters.window_size, 2, 164);
+    ImGui::SliderInt("Overlap", &session.correlatorparameters.overlap, 0, std::max(0, session.correlatorparameters.window_size - 1));
+    session.correlatorparameters.window_size = std::max(2, session.correlatorparameters.window_size);
+    session.correlatorparameters.overlap = std::clamp(
+        session.correlatorparameters.overlap,
+        0,
+        session.correlatorparameters.window_size - 1);
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Experimental Parameters");
@@ -296,7 +312,7 @@ void UI::DrawCalculationsPanel()
     int   win      = 16; while(win < (int)(deff_px * 4.0f)) win *= 2;
 
     // Physical size of each output grid cell in the sample plane
-    int   step     = session.correlatorparameters.window_size - session.correlatorparameters.overlap;
+    int   step     = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap);
     float res_mm   = step * P_px * Z_a / z_i * 1e3f;
 
     //ImGui::SeparatorText("Inputs Used");
@@ -604,7 +620,7 @@ void UI::DrawCorrelation()
     // --- Physical scale: correlation grid spacing -> mm ---
     float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
                      / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = (session.correlatorparameters.window_size - session.correlatorparameters.overlap)
+    float px_to_mm = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap)
                      * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = field.width  * px_to_mm;
     float field_h_mm = field.height * px_to_mm;
@@ -762,7 +778,7 @@ void UI::DrawVal()
     // --- Physical scale: Val cell spacing -> mm ---
     float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
                      / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = (session.correlatorparameters.window_size - session.correlatorparameters.overlap)
+    float px_to_mm = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap)
                      * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = field.width  * px_to_mm;
     float field_h_mm = field.height * px_to_mm;
@@ -907,7 +923,7 @@ void UI::DrawSurf()
     // --- Physical scale: same correlation grid spacing -> mm ---
     float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
                      / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = (session.correlatorparameters.window_size - session.correlatorparameters.overlap)
+    float px_to_mm = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap)
                      * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = surface.cols() * px_to_mm;
     float field_h_mm = surface.rows() * px_to_mm;
@@ -1356,10 +1372,6 @@ void UI::DrawSavePanel()
     ImGui::InputText("##savename", name_buf, sizeof(name_buf));
 
     std::string base = save_dir + "/" + std::string(name_buf);
-
-    bool any_done = session.GetStageState(STAGE_CORRELATION) == Done ||
-                    session.GetStageState(STAGE_VAL)   == Done ||
-                    session.GetStageState(STAGE_RECON) == Done;
 
     ImGui::SeparatorText("Export");
 

@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <fftw3.h>
 #include <cmath>
-#include <chrono>
 #include <numeric>
 
 //////////////////////////////////////////////////////
@@ -11,8 +10,6 @@
 
 namespace
 {
-using CorrelatorClock = std::chrono::high_resolution_clock;
-
 constexpr int kPeakPatchRadius = 2;
 constexpr int kAutocorrelationRadius = 4;
 constexpr int kPeakMaskRadius = 5;
@@ -138,6 +135,9 @@ float ComputeSignalToNoise(const Eigen::MatrixXf& ccmap, int row, int col)
     ccmap_flattened.block(r0, c0, r1 - r0, c1 - c0).setZero();
 
     float second_peak = ccmap_flattened.maxCoeff(); // Next-highest peak.
+    if(!std::isfinite(second_peak) || second_peak <= 1e-12f)
+        return 0.0f;
+
     return primary_peak / second_peak;
 }
 
@@ -155,9 +155,6 @@ struct PeakSearchContext
     fftwf_complex* product;
     float* ccmap_raw;
     fftwf_plan inv_plan;
-    double& t_phi;
-    double& t_R;
-    double& t_nr;
     float R[2 * kAutocorrelationRadius + 1][2 * kAutocorrelationRadius + 1] = {}; // Local autocorrelation patch.
 
     void BuildAutocorrelationPatch()
@@ -165,8 +162,6 @@ struct PeakSearchContext
         // Paper step 3 / eqs. (5)-(6): build the local reference autocorrelation R.
         // The CMM prediction for a sub-pixel shift is obtained by sampling this
         // autocorrelation surface with bicubic interpolation.
-        auto t0 = CorrelatorClock::now();
-
         for(int i = 0; i < rows * freq_cols; i++)
         {
             product[i][0] = ref_out_saved[i][0] * ref_out_saved[i][0]
@@ -185,8 +180,6 @@ struct PeakSearchContext
                     ccmap_raw[ri * cols + ci] / float(rows * cols);
             }
         }
-
-        t_R += std::chrono::duration<double>(CorrelatorClock::now() - t0).count();
     }
 
     bool ExtractNormalizedPeakPatch(int cell_row, int cell_col, float (&phi_norm)[25])
@@ -196,8 +189,6 @@ struct PeakSearchContext
         // its mean so the residual compares the patch shape rather than scale.
         // This normalized phi patch is the measured target used by every later
         // helper in this context.
-        auto t0 = CorrelatorClock::now();
-
         float phi[25] = {}; // Measured 5x5 peak patch.
         for(int m = -kPeakPatchRadius; m <= kPeakPatchRadius; m++)
         {
@@ -207,8 +198,6 @@ struct PeakSearchContext
                     ccmap(cell_row + m, cell_col + n);
             }
         }
-
-        t_phi += std::chrono::duration<double>(CorrelatorClock::now() - t0).count();
 
         const float phi_mean = std::accumulate(std::begin(phi), std::end(phi), 0.0f) / 25.0f; // Mean-normalize phi.
         if(std::abs(phi_mean) < 1e-8f)
@@ -411,8 +400,6 @@ struct PeakSearchContext
         if(!ExtractNormalizedPeakPatch(cell_row, cell_col, phi_norm))
             return solution;
 
-        auto solve_t0 = CorrelatorClock::now();
-
         float best_u = std::clamp(gauss_u, -kSubpixelClamp, kSubpixelClamp); // Current best u'
         float best_v = std::clamp(gauss_v, -kSubpixelClamp, kSubpixelClamp); // Current best v'
         CmmEvalResult best = Evaluate(phi_norm, best_u, best_v);
@@ -489,8 +476,6 @@ struct PeakSearchContext
                        best_u, best_v, best);
         }
 
-        t_nr += std::chrono::duration<double>(CorrelatorClock::now() - solve_t0).count();
-
         solution.du = best_u;
         solution.dv = best_v;
         solution.eps = best.eps;
@@ -505,12 +490,8 @@ struct PeakSearchContext
 // Sub-Pixel Peak Search
 //////////////////////////////////////////////////////
 
-Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap,
-                              double& t_patch, double& t_phi, double& t_R, double& t_gamma, double& t_nr)
+Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap)
 {
-    (void)t_patch;
-    (void)t_gamma;
-
     // Top-level peak workflow:
     // 1. find the discrete correlation peak
     // 2. build the reference autocorrelation patch R for CMM
@@ -537,10 +518,7 @@ Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap,
         ref_out_saved,
         product,
         ccmap_raw,
-        inv_plan,
-        t_phi,
-        t_R,
-        t_nr
+        inv_plan
     };
     context.BuildAutocorrelationPatch();
 

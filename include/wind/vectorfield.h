@@ -11,7 +11,7 @@ public:
     VectorField() = default;
 
     /// @brief Allocate zero-filled u, v, and s2n matrices of the given size.
-    VectorField(const int width, const int height);
+    VectorField(const int rows, const int cols);
 
     /// @brief Write the field to a CSV file with columns: col, row, u, v, s2n.
     /// @param path Destination file path.

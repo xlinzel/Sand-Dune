@@ -3,6 +3,7 @@
 #include <future>
 #include <chrono>
 #include <fstream>
+#include <atomic>
 
 #include <sun/image.h>
 #include <sun/mask.h>
@@ -153,7 +154,7 @@ public:
     void SetActiveIndex(int i); ///< Select which batch frame to display.
     int  GetActiveIndex() const;
 
-    bool HasFlow() const;  ///< Returns true if at least one flow image is loaded.
+    bool HasFlow() const;  ///< Returns true if every selected flow image loaded successfully.
     int  GetFlowCount() const; ///< Number of loaded flow images.
     const std::vector<std::string>& GetFlowPaths() const;
 
@@ -238,7 +239,7 @@ private:
 
     int active_index = 0;
 
-    StageState stagestates[STAGE_TOTAL];
+    std::atomic<StageState> stagestates[STAGE_TOTAL];
 
     // Async
     std::atomic<bool> stop_requested{false};
