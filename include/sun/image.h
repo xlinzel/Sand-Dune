@@ -28,7 +28,7 @@ public:
     /// @brief Raw 8-bit pixel data in row-major order.
     const std::vector<unsigned char>& GetData() const;
 
-    /// @brief Pixel data as a float matrix normalised to [0, 1], shape (height × width).
+    /// @brief Pixel data as a float matrix normalised to [0, 1], shape (height x width).
     Eigen::MatrixXf GetMat() const;
 
     bool GetLoaded() const; ///< Returns true if an image has been successfully loaded.

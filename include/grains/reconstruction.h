@@ -14,7 +14,7 @@
 
 /// @brief Surface reconstruction from a 2-D gradient field using the Frankot-Chellappa FFT method.
 ///
-/// Integrates the @p u (∂S/∂x) and @p v (∂S/∂y) components of a VectorField
+/// Integrates the @p u (dS/dx) and @p v (dS/dy) components of a VectorField
 /// in the Fourier domain to produce a single-valued surface height map.
 /// The method enforces integrability and is well-suited to noisy BOS gradient data.
 class Reconstruction
@@ -24,7 +24,7 @@ public:
 
     /// @brief Integrate the gradient field and return the reconstructed surface.
     /// @param data VectorField whose @p u and @p v components are the surface gradients (dn/dx, dn/dy).
-    /// @return Height map as a float matrix (rows × cols), in the same units as the input gradients.
+/// @return Height map as a float matrix (rows x cols), in the same units as the input gradients.
     Eigen::MatrixXf Compute(const VectorField& data) const;
 
 private:

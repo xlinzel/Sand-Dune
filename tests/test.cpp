@@ -2,7 +2,7 @@
 #include <lib/doctest.h>
 #include <sun/image.h>
 #include <sun/mask.h>
-#include <grains/piv.h>
+#include <grains/correlator.h>
 #include <grains/validation.h>
 #include <grains/reconstruction.h>
 #include <session.h>
@@ -158,24 +158,24 @@ TEST_CASE("Mask Generation")
     CHECK(result(0, 0) == 0.0f);
 }
 
-TEST_CASE("PIV Computation")
+TEST_CASE("Correlator Computation")
 {
     SUBCASE("Parameters")
     {
-        PIV piv(kTestWindowSize, kTestOverlap);
-        CHECK(piv.GetWindowSize() == kTestWindowSize);
-        CHECK(piv.GetOverlap() == kTestOverlap);
+        Correlator correlator(kTestWindowSize, kTestOverlap);
+        CHECK(correlator.GetWindowSize() == kTestWindowSize);
+        CHECK(correlator.GetOverlap() == kTestOverlap);
 
-        piv.SetWindowSize(kTestWindowSize / 2);
-        CHECK(piv.GetWindowSize() == kTestWindowSize / 2);
+        correlator.SetWindowSize(kTestWindowSize / 2);
+        CHECK(correlator.GetWindowSize() == kTestWindowSize / 2);
     }
 
     SUBCASE("Zero Displacement")
     {
         // Identical images should produce near-zero displacement
         Eigen::MatrixXf img = Eigen::MatrixXf::Random(200, 200);
-        PIV piv(kTestWindowSize, kTestOverlap);
-        VectorField result = piv.Compute(img, img);
+        Correlator correlator(kTestWindowSize, kTestOverlap);
+        VectorField result = correlator.Compute(img, img);
 
         CHECK(result.u.cwiseAbs().maxCoeff() < 0.15f);
         CHECK(result.v.cwiseAbs().maxCoeff() < 0.15f);
@@ -190,8 +190,8 @@ TEST_CASE("PIV Computation")
         Eigen::MatrixXf flow = Eigen::MatrixXf::Zero(200, 200);
         flow.block(0, 5, 200, 195) = ref.block(0, 0, 200, 195);
 
-        PIV piv(kTestWindowSize, kTestOverlap);
-        VectorField result = piv.Compute(ref, flow);
+        Correlator correlator(kTestWindowSize, kTestOverlap);
+        VectorField result = correlator.Compute(ref, flow);
 
         // Centre window should detect ~5px horizontal displacement
         int centre_row = result.u.rows() / 2;
@@ -264,8 +264,8 @@ TEST_CASE("PIV Computation")
         {
             Eigen::MatrixXf flow = render(shift.x(), shift.y());
 
-            PIV piv(kTestWindowSize, kTestOverlap);
-            VectorField result = piv.Compute(ref, flow);
+            Correlator correlator(kTestWindowSize, kTestOverlap);
+            VectorField result = correlator.Compute(ref, flow);
 
             CHECK(std::abs(result.u.mean() - shift.x()) < 0.08f);
             CHECK(std::abs(result.v.mean() - shift.y()) < 0.08f);
@@ -274,7 +274,7 @@ TEST_CASE("PIV Computation")
 
 }
 
-TEST_CASE("PIV Repo Image Pair")
+TEST_CASE("Correlation Repo Image Pair")
 {
     Image ref_image;
     Image flow_image;
@@ -282,8 +282,8 @@ TEST_CASE("PIV Repo Image Pair")
     CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_ref.bmp").c_str()).empty());
     CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_flow.bmp").c_str()).empty());
 
-    PIV piv(kTestWindowSize, kTestOverlap);
-    VectorField result = piv.Compute(ref_image.GetMat(), flow_image.GetMat());
+    Correlator correlator(kTestWindowSize, kTestOverlap);
+    VectorField result = correlator.Compute(ref_image.GetMat(), flow_image.GetMat());
 
     float u_mean = result.u.mean();
     float v_mean = result.v.mean();
@@ -304,7 +304,7 @@ TEST_CASE("PIV Repo Image Pair")
     PlaneFitMetrics validated_u_center_plane = ComputePlaneFitMetrics(CenterCrop(validated.u));
     PlaneFitMetrics validated_v_center_plane = ComputePlaneFitMetrics(CenterCrop(validated.v));
 
-    PrintSection("PIV Field Stats: if_0.1");
+    PrintSection("Correlation Field Stats: if_0.1");
     PrintLine("u mean", FormatFloat(u_mean) + " px");
     PrintLine("v mean", FormatFloat(v_mean) + " px");
     PrintLine("u stddev", FormatFloat(u_std) + " px");
@@ -569,8 +569,8 @@ TEST_CASE("Slide Gradient Diagnostics")
         CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/" + pair.ref_name).c_str()).empty());
         CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/" + pair.flow_name).c_str()).empty());
 
-        PIV piv(kTestWindowSize, kTestOverlap);
-        VectorField raw = piv.Compute(ref_image.GetMat(), flow_image.GetMat());
+        Correlator correlator(kTestWindowSize, kTestOverlap);
+        VectorField raw = correlator.Compute(ref_image.GetMat(), flow_image.GetMat());
         VectorField filtered = validation.PostProcess(raw);
 
         GradientDiagnostic raw_u = field_metrics(raw.u, true);
@@ -742,8 +742,8 @@ TEST_CASE("Full Pipeline Test")
     Session session;
 
     // Parameters
-    session.pivparameters.window_size = kTestWindowSize;
-    session.pivparameters.overlap = kTestOverlap;
+    session.correlatorparameters.window_size = kTestWindowSize;
+    session.correlatorparameters.overlap = kTestOverlap;
 
     session.opticalparameters.Z_d = 300.0f;
     session.opticalparameters.Z_a = 100.0f;
@@ -760,19 +760,19 @@ TEST_CASE("Full Pipeline Test")
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";
 
-    CHECK(session.GetStageState(STAGE_PIV) == Ready);
+    CHECK(session.GetStageState(STAGE_CORRELATION) == Ready);
 
     //-----------------------------------------------------------------------------
-    // PIV
+    // Correlation
     //-----------------------------------------------------------------------------
 
     begin = std::chrono::steady_clock::now();
-    session.RunPIV();
+    session.RunCorrelation();
     end = std::chrono::steady_clock::now();
-    std::cout << "PIV Elapsed Time: " << FormatTime(begin, end) << "\n";
+    std::cout << "Correlation Elapsed Time: " << FormatTime(begin, end) << "\n";
 
-    CHECK(session.GetStageState(STAGE_PIV) == Done);
-    session.GetPIVField().SaveCSV(std::string(PROJECT_DIR) + "/csv/result.csv");
+    CHECK(session.GetStageState(STAGE_CORRELATION) == Done);
+    session.GetCorrelationField().SaveCSV(std::string(PROJECT_DIR) + "/csv/result.csv");
 
     //-----------------------------------------------------------------------------
     // VALIDATION

@@ -7,11 +7,11 @@
 #include <sun/image.h>
 #include <sun/mask.h>
 #include <wind/vectorfield.h>
-#include <grains/piv.h>
+#include <grains/correlator.h>
 #include <grains/validation.h>
 #include <grains/reconstruction.h>
 #include <wind/opticalparameters.h>
-#include <wind/pivparameters.h>
+#include <wind/correlatorparameters.h>
 
 /// @brief References:
 /// - https://pmc.ncbi.nlm.nih.gov/articles/PMC8747424/
@@ -32,15 +32,15 @@ enum StageState
 /// @brief Identifiers for the three main pipeline stages.
 enum Stages
 {
-    STAGE_PIV,   ///< Cross-correlation (PIV) stage.
+    STAGE_CORRELATION, ///< Cross-correlation stage.
     STAGE_VAL,   ///< Validation and outlier replacement stage.
     STAGE_RECON, ///< Surface reconstruction (or thickness map in calibration mode).
-    STAGE_TOTAL  ///< Sentinel — total number of stages.
+    STAGE_TOTAL  ///< Sentinel - total number of stages.
 };
 
 /// @brief Top-level controller for the BOS surface reconstruction pipeline.
 ///
-/// Manages image loading, the three-stage processing pipeline (PIV → Validation → Reconstruction),
+/// Manages image loading, the three-stage processing pipeline (Correlation -> Validation -> Reconstruction),
 /// refraction correction, result scaling, and async execution.  A single Session instance is
 /// shared between the UI and the compute back-end.
 ///
@@ -78,10 +78,10 @@ public:
     // -------------------------------------------------------------------------
     ///@{
 
-    /// @brief Run PIV cross-correlation on all loaded flow images (blocking).
-    void RunPIV();
+    /// @brief Run correlation on all loaded flow images (blocking).
+    void RunCorrelation();
 
-    /// @brief Run validation and outlier replacement on PIV results (blocking).
+    /// @brief Run validation and outlier replacement on correlation results (blocking).
     void RunValidation();
 
     /// @brief Run surface reconstruction or thickness-map computation (blocking).
@@ -97,11 +97,11 @@ public:
     // -------------------------------------------------------------------------
     ///@{
 
-    void RunPIVAsync();           ///< Launch RunPIV() on a background thread.
+    void RunCorrelationAsync();   ///< Launch RunCorrelation() on a background thread.
     void RunValidationAsync();    ///< Launch RunValidation() on a background thread.
     void RunReconstructionAsync();///< Launch RunReconstruction() on a background thread.
 
-    /// @brief Run the complete pipeline (PIV → Validation → Reconstruction) on a background thread.
+    /// @brief Run the complete pipeline (Correlation -> Validation -> Reconstruction) on a background thread.
     void RunAllAsync();
 
     /// @brief Returns true while any pipeline stage is executing asynchronously.
@@ -116,8 +116,8 @@ public:
 
     /// @brief Convert raw pixel displacements to physical units (dn or mm) using the optical parameters.
     ///
-    /// In normal mode scales PIV/val fields and the reconstructed surface.
-    /// In calibration mode (@p n_calibration = true) the PIV/val fields are left in pixels
+    /// In normal mode scales correlation/validation fields and the reconstructed surface.
+    /// In calibration mode (@p n_calibration = true) the correlation/validation fields are left in pixels
     /// and the surface is already in mm, so this call is a no-op for those outputs.
     void ScaleFields();
 
@@ -133,7 +133,7 @@ public:
     /// @brief Save all results asynchronously to the given base path.
     void SaveAsync(const std::string& base_path);
 
-    void SavePIVCSV(const std::string& base_path);     ///< Write scaled PIV fields to CSV.
+    void SaveCorrelationCSV(const std::string& base_path); ///< Write scaled correlation fields to CSV.
     void SaveValCSV(const std::string& base_path);     ///< Write validated fields to CSV.
     void SaveSurfaceCSV(const std::string& base_path); ///< Write the surface / thickness map to CSV.
 
@@ -157,7 +157,7 @@ public:
     int  GetFlowCount() const; ///< Number of loaded flow images.
     const std::vector<std::string>& GetFlowPaths() const;
 
-    const VectorField&    GetPIVField()  const; ///< Scaled PIV field for the active frame.
+    const VectorField&    GetCorrelationField() const; ///< Scaled correlation field for the active frame.
     const VectorField&    GetValField()  const; ///< Validated field for the active frame.
     const Eigen::MatrixXf& GetSurface() const; ///< Reconstructed surface or thickness map for the active frame.
 
@@ -176,7 +176,7 @@ public:
     bool  mask_apply = true;     ///< Apply the mask to reconstruction outputs when true.
     ///@}
 
-    PIVParameters     pivparameters;    ///< Window size, overlap, and search size for PIV.
+    CorrelatorParameters correlatorparameters; ///< Window size and overlap for correlation.
     OpticalParameters opticalparameters;///< Camera geometry and sample properties.
 
     // -------------------------------------------------------------------------
@@ -191,7 +191,7 @@ public:
     /// @name Processing flags
     // -------------------------------------------------------------------------
     ///@{
-    bool n_correction  = true;  ///< Apply refraction correction to PIV results (normal mode only).
+    bool n_correction  = true;  ///< Apply refraction correction to correlation results (normal mode only).
     bool n_calibration = false; ///< Calibration mode: invert refraction to estimate sample thickness.
     bool b_ref         = true;  ///< Show refractive-index units (dn) when true; thickness (mm) when false.
     ///@}
@@ -209,13 +209,13 @@ private:
     // -------------------------------------------------------------------------
     ///@{
 
-    /// @brief Pre-compute the per-pixel refraction correction matrices for a field of size h × w.
+    /// @brief Pre-compute the per-pixel refraction correction matrices for a field of size h x w.
     ///
     /// Calculates the lateral ray displacement caused by refraction through a sample of known
     /// thickness (@p OpticalParameters::t) and refractive index (@p OpticalParameters::n).
     void ComputeRefractionCorrection(int h, int w);
 
-    /// @brief Subtract the pre-computed correction matrices from all raw_piv_field entries.
+    /// @brief Subtract the pre-computed correction matrices from all raw_correlation_field entries.
     void ApplyRefractionCorrection();
 
     /// @brief Invert the refraction geometry to estimate sample thickness from validated displacements.
@@ -226,8 +226,8 @@ private:
 
     ///@}
 
-    std::vector<VectorField> raw_piv_field; ///< Per-frame PIV fields before refraction correction.
-    std::vector<VectorField> piv_field;     ///< Per-frame PIV fields after correction and scaling.
+    std::vector<VectorField> raw_correlation_field; ///< Per-frame correlation fields before refraction correction.
+    std::vector<VectorField> correlation_field;     ///< Per-frame correlation fields after correction and scaling.
     Eigen::MatrixXf correction[2];          ///< Refraction correction matrices for u [0] and v [1].
 
     std::vector<VectorField> raw_val_field; ///< Per-frame validated fields before scaling.

@@ -2,9 +2,9 @@
 
 #include <Eigen/Dense>
 
-/// @brief A 2-D displacement field produced by PIV or post-processed by validation.
+/// @brief A 2-D displacement field produced by correlation or post-processed by validation.
 ///
-/// Each matrix is stored in row-major order with dimensions (height × width).
+/// Each matrix is stored in row-major order with dimensions (height x width).
 class VectorField
 {
 public:

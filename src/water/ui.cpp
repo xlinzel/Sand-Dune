@@ -4,7 +4,7 @@
 UI::UI(Session& session, SDL_Renderer* renderer)
     : session(session), renderer(renderer)
 {
-    piv_textures.resize(3);
+    correlation_textures.resize(3);
 }
 
 void UI::SetRenderer(SDL_Renderer* renderer)
@@ -158,7 +158,7 @@ void UI::DrawLoadPanel()
       {
           session.SetActiveIndex(idx - 1);
           // Null textures so they rebuild for new active image
-          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
           for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
           SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
       }
@@ -166,7 +166,7 @@ void UI::DrawLoadPanel()
       if(ImGui::Button("Next >") && idx < session.GetFlowCount() - 1)
       {
           session.SetActiveIndex(idx + 1);
-          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
           for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
           SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
       }
@@ -186,11 +186,11 @@ void UI::DrawParametersPanel()
 
     ImGui::Begin("Parameters", nullptr);
 
-    ImGui::SeparatorText("PIV Parameters");
+    ImGui::SeparatorText("Correlation Parameters");
     ImGui::PushItemWidth(-100.0f);
 
-    ImGui::SliderInt("Window Size", &session.pivparameters.window_size, 0, 164);
-    ImGui::SliderInt("Overlap", &session.pivparameters.overlap, 0, session.pivparameters.window_size - 2);
+    ImGui::SliderInt("Window Size", &session.correlatorparameters.window_size, 0, 164);
+    ImGui::SliderInt("Overlap", &session.correlatorparameters.overlap, 0, session.correlatorparameters.window_size - 2);
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Experimental Parameters");
@@ -244,7 +244,7 @@ void UI::DrawParametersPanel()
     {
         session.ScaleFields();
         // Null textures so Draw functions rebuild them next frame
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
         for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
         SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
     }
@@ -296,7 +296,7 @@ void UI::DrawCalculationsPanel()
     int   win      = 16; while(win < (int)(deff_px * 4.0f)) win *= 2;
 
     // Physical size of each output grid cell in the sample plane
-    int   step     = session.pivparameters.window_size - session.pivparameters.overlap;
+    int   step     = session.correlatorparameters.window_size - session.correlatorparameters.overlap;
     float res_mm   = step * P_px * Z_a / z_i * 1e3f;
 
     //ImGui::SeparatorText("Inputs Used");
@@ -313,7 +313,7 @@ void UI::DrawCalculationsPanel()
     Val("d_diffraction", dd_px > 7.0f  ? col_r : dd_px    > 4.0f ? col_y : col_g,   "%.2f px",  dd_px);
     Val("d_eff",       deff_px < 1.0f || deff_px > 8.0f ? col_r : deff_px > 4.0f ? col_y : col_g, "%.2f px", deff_px);
 
-    ImGui::SeparatorText("PIV");
+    ImGui::SeparatorText("Correlation");
     Val("Suggested window",    col_g,                                     "%d px",    win);
     Val("Spatial resolution",  res_mm > 5.0f ? col_r : res_mm > 2.0f ? col_y : col_g, "%.2f mm", res_mm);
 
@@ -334,7 +334,7 @@ void UI::DrawPipelinePanel()
     
     ImGui::Text("Status: ");
     ImGui::SameLine();
-    switch (session.GetStageState(STAGE_PIV))
+    switch (session.GetStageState(STAGE_CORRELATION))
     {
         case Idle:
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "[Idle]"); break;
@@ -348,7 +348,7 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    bool was_disabled = (session.GetStageState(STAGE_PIV) != Ready && session.GetStageState(STAGE_PIV) != Done && session.GetStageState(STAGE_PIV) != Dirty) || session.IsRunning();
+    bool was_disabled = (session.GetStageState(STAGE_CORRELATION) != Ready && session.GetStageState(STAGE_CORRELATION) != Done && session.GetStageState(STAGE_CORRELATION) != Dirty) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
@@ -360,7 +360,7 @@ void UI::DrawPipelinePanel()
     if(was_disabled)
         ImGui::EndDisabled();
 
-    if(session.GetStageState(STAGE_PIV) == Busy)
+    if(session.GetStageState(STAGE_CORRELATION) == Busy)
     {
         float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
         ImGui::ProgressBar(p, ImVec2(-1, 0));
@@ -380,13 +380,13 @@ void UI::DrawPipelinePanel()
     }
 
     //----------------------------
-    //PIV
+    // Correlation
     //----------------------------
-    ImGui::SeparatorText("PIV");
+    ImGui::SeparatorText("Correlation");
     
     ImGui::Text("Status: ");
     ImGui::SameLine();
-    switch (session.GetStageState(STAGE_PIV))
+    switch (session.GetStageState(STAGE_CORRELATION))
     {
         case Idle:
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "[Idle]"); break;
@@ -400,19 +400,19 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    was_disabled = (session.GetStageState(STAGE_PIV) != Ready && session.GetStageState(STAGE_PIV) != Done && session.GetStageState(STAGE_PIV) != Dirty) || session.IsRunning();
+    was_disabled = (session.GetStageState(STAGE_CORRELATION) != Ready && session.GetStageState(STAGE_CORRELATION) != Done && session.GetStageState(STAGE_CORRELATION) != Dirty) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
-    if(ImGui::Button("Run PIV"))
+    if(ImGui::Button("Run Correlation"))
     {
-        session.RunPIVAsync();
+        session.RunCorrelationAsync();
     }
     
     if(was_disabled)
         ImGui::EndDisabled();
 
-    if(session.GetStageState(STAGE_PIV) == Busy)
+    if(session.GetStageState(STAGE_CORRELATION) == Busy)
     {
         float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
         ImGui::ProgressBar(p, ImVec2(-1, 0));
@@ -452,7 +452,7 @@ void UI::DrawPipelinePanel()
             ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
     }
 
-    was_disabled = (session.GetStageState(STAGE_VAL) != Ready && session.GetStageState(STAGE_VAL) != Done && (session.GetStageState(STAGE_VAL) != Dirty || session.GetStageState(STAGE_PIV) != Done)) || session.IsRunning();
+    was_disabled = (session.GetStageState(STAGE_VAL) != Ready && session.GetStageState(STAGE_VAL) != Done && (session.GetStageState(STAGE_VAL) != Dirty || session.GetStageState(STAGE_CORRELATION) != Done)) || session.IsRunning();
     if(was_disabled)
         ImGui::BeginDisabled();
 
@@ -503,27 +503,27 @@ void UI::DrawPipelinePanel()
 void UI::DrawVisualizationPanel()
 {
     // Track state transitions here so Draw* functions see them even when not called during Busy
-    static StageState last_piv  = Idle;
+    static StageState last_correlation = Idle;
     static StageState last_val  = Idle;
     static StageState last_recon = Idle;
 
-    StageState cur_piv   = session.GetStageState(STAGE_PIV);
+    StageState cur_correlation = session.GetStageState(STAGE_CORRELATION);
     StageState cur_val   = session.GetStageState(STAGE_VAL);
     StageState cur_recon = session.GetStageState(STAGE_RECON);
 
-    if(cur_piv == Done && last_piv != Done)
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(piv_textures[i]); piv_textures[i] = nullptr; }
+    if(cur_correlation == Done && last_correlation != Done)
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
     if(cur_val == Done && last_val != Done)
         for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
     if(cur_recon == Done && last_recon != Done)
         { SDL_DestroyTexture(surf_texture); surf_texture = nullptr; }
 
-    last_piv   = cur_piv;
+    last_correlation = cur_correlation;
     last_val   = cur_val;
     last_recon = cur_recon;
 
-    if(cur_piv == Done)
-        DrawPIV();
+    if(cur_correlation == Done)
+        DrawCorrelation();
 
     if(cur_val == Done)
         DrawVal();
@@ -532,9 +532,9 @@ void UI::DrawVisualizationPanel()
         DrawSurf();
 }
 
-void UI::RebuildPIVTextures()
+void UI::RebuildCorrelationTextures()
 {
-    const VectorField& field = session.GetPIVField();
+    const VectorField& field = session.GetCorrelationField();
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
@@ -544,13 +544,13 @@ void UI::RebuildPIVTextures()
     ImPlot::PushColormap(ImPlotColormap_Viridis);
     for(int i = 0; i < 3; i++)
     {
-        float range = piv_cmap_max[i] - piv_cmap_min[i];
+        float range = correlation_cmap_max[i] - correlation_cmap_min[i];
 
         for(int r = 0; r < h; r++)
         {
             for(int c = 0; c < w; c++)
             {
-                float t = (range != 0.0f) ? ((*data[i])(r, c) - piv_cmap_min[i]) / range : 0.0f;
+                float t = (range != 0.0f) ? ((*data[i])(r, c) - correlation_cmap_min[i]) / range : 0.0f;
                 t = std::isfinite(t) ? std::clamp(t, 0.0f, 1.0f) : 0.0f;
                 ImVec4 col = ImPlot::SampleColormap(t);
                 int idx = (r * w + c) * 4;
@@ -562,49 +562,49 @@ void UI::RebuildPIVTextures()
         }
 
         // Upload to GPU, nearest-neighbor scaling for hard pixel boundaries
-        if(piv_textures[i]) SDL_DestroyTexture(piv_textures[i]);
-        piv_textures[i] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+        if(correlation_textures[i]) SDL_DestroyTexture(correlation_textures[i]);
+        correlation_textures[i] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
                                             SDL_TEXTUREACCESS_STATIC, w, h);
-        SDL_SetTextureScaleMode(piv_textures[i], SDL_SCALEMODE_NEAREST);
-        SDL_UpdateTexture(piv_textures[i], nullptr, pixels.data(), w * 4);
+        SDL_SetTextureScaleMode(correlation_textures[i], SDL_SCALEMODE_NEAREST);
+        SDL_UpdateTexture(correlation_textures[i], nullptr, pixels.data(), w * 4);
     }
     ImPlot::PopColormap();
 }
 
-void UI::DrawPIV()
+void UI::DrawCorrelation()
 {
-    ImGui::Begin("PIV Results");
+    ImGui::Begin("Correlation Results");
 
-    const VectorField& field = session.GetPIVField();
+    const VectorField& field = session.GetCorrelationField();
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
     static float data_min_cache[3] = {0,0,0}, data_max_cache[3] = {1,1,1};
-    if(piv_textures[0] == nullptr)
+    if(correlation_textures[0] == nullptr)
     {
         // Auto-range all three maps on first build
         const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
         for(int i = 0; i < 3; i++)
         {
-            piv_cmap_min[i] = maps[i]->minCoeff();
-            piv_cmap_max[i] = maps[i]->maxCoeff();
-            data_min_cache[i] = std::isfinite(piv_cmap_min[i]) ? piv_cmap_min[i] : 0.0f;
-            data_max_cache[i] = std::isfinite(piv_cmap_max[i]) ? piv_cmap_max[i] : 1.0f;
+            correlation_cmap_min[i] = maps[i]->minCoeff();
+            correlation_cmap_max[i] = maps[i]->maxCoeff();
+            data_min_cache[i] = std::isfinite(correlation_cmap_min[i]) ? correlation_cmap_min[i] : 0.0f;
+            data_max_cache[i] = std::isfinite(correlation_cmap_max[i]) ? correlation_cmap_max[i] : 1.0f;
         }
     }
-    bool dirty = (piv_textures[0] == nullptr);
+    bool dirty = (correlation_textures[0] == nullptr);
     for(int i = 0; i < 3; i++)
-        dirty |= (piv_cmap_min[i] != last_min[i] || piv_cmap_max[i] != last_max[i]);
+        dirty |= (correlation_cmap_min[i] != last_min[i] || correlation_cmap_max[i] != last_max[i]);
     if(dirty)
     {
-        RebuildPIVTextures();
-        for(int i = 0; i < 3; i++) { last_min[i] = piv_cmap_min[i]; last_max[i] = piv_cmap_max[i]; }
+        RebuildCorrelationTextures();
+        for(int i = 0; i < 3; i++) { last_min[i] = correlation_cmap_min[i]; last_max[i] = correlation_cmap_max[i]; }
     }
 
-    // --- Physical scale: PIV cell spacing -> mm ---
+    // --- Physical scale: correlation grid spacing -> mm ---
     float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
                      / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = (session.pivparameters.window_size - session.pivparameters.overlap)
+    float px_to_mm = (session.correlatorparameters.window_size - session.correlatorparameters.overlap)
                      * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = field.width  * px_to_mm;
     float field_h_mm = field.height * px_to_mm;
@@ -619,12 +619,12 @@ void UI::DrawPIV()
     float plot_w    = plot_h / ratio;
 
     // --- Map selection (mutually exclusive, no rebuild) ---
-    ImGui::RadioButton("u",   &piv_map, 0); ImGui::SameLine();
-    ImGui::RadioButton("v",   &piv_map, 1); ImGui::SameLine();
-    ImGui::RadioButton("s2n", &piv_map, 2);
+    ImGui::RadioButton("u",   &correlation_map, 0); ImGui::SameLine();
+    ImGui::RadioButton("v",   &correlation_map, 1); ImGui::SameLine();
+    ImGui::RadioButton("s2n", &correlation_map, 2);
 
     // --- Heatmap plot ---
-    if(ImPlot::BeginPlot("##pivresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
+    if(ImPlot::BeginPlot("##correlationresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
     {
         ImPlot::SetupAxes("x (mm)", "y (mm)");
         ImPlot::SetupAxesLimits(-field_w_mm/2, field_w_mm/2, -field_h_mm/2, field_h_mm/2, ImGuiCond_Once);
@@ -640,12 +640,12 @@ void UI::DrawPIV()
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
                 const char* unit = session.n_calibration ? " px"
-                                 : (piv_map == 0) ? " dn/du" : (piv_map == 1) ? " dn/dv" : "";
-                ImGui::SetTooltip("%.4f%s", (*maps[piv_map])(row, col), unit);
+                                 : (correlation_map == 0) ? " dn/du" : (correlation_map == 1) ? " dn/dv" : "";
+                ImGui::SetTooltip("%.4f%s", (*maps[correlation_map])(row, col), unit);
             }
         }
 
-        ImPlot::PlotImage("##heatmap", (ImTextureID)piv_textures[piv_map],
+        ImPlot::PlotImage("##heatmap", (ImTextureID)correlation_textures[correlation_map],
                           ImPlotPoint(-field_w_mm/2, -field_h_mm/2), ImPlotPoint(field_w_mm/2, field_h_mm/2));
         ImPlot::EndPlot();
     }
@@ -653,7 +653,7 @@ void UI::DrawPIV()
     // --- Colormap scale bar ---
     ImGui::SameLine();
     ImPlot::PushColormap(ImPlotColormap_Viridis);
-    ImPlot::ColormapScale("##scale", piv_cmap_min[piv_map], piv_cmap_max[piv_map], ImVec2(scale_w, plot_h));
+    ImPlot::ColormapScale("##scale", correlation_cmap_min[correlation_map], correlation_cmap_max[correlation_map], ImVec2(scale_w, plot_h));
     ImPlot::PopColormap();
 
     // --- Range controls: Min | Max | Auto (per-map) ---
@@ -661,22 +661,22 @@ void UI::DrawPIV()
     float half_w     = (plot_w - ImGui::GetStyle().ItemSpacing.x * 2 - auto_btn_w) * 0.5f;
 
     {
-        float data_min = data_min_cache[piv_map];
-        float data_max = data_max_cache[piv_map];
+        float data_min = data_min_cache[correlation_map];
+        float data_max = data_max_cache[correlation_map];
         float step = (data_max - data_min) / 200.0f;
         int decimals = (step > 0.0f) ? std::max(0, (int)std::ceil(-std::log10(step))) : 4;
         char fmt[16];
         snprintf(fmt, sizeof(fmt), "%%.%df", decimals);
         ImGui::SetNextItemWidth(half_w);
-        ImGui::SliderFloat("Min##cmap", &piv_cmap_min[piv_map], data_min, piv_cmap_max[piv_map], fmt);
+        ImGui::SliderFloat("Min##cmap", &correlation_cmap_min[correlation_map], data_min, correlation_cmap_max[correlation_map], fmt);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(half_w);
-        ImGui::SliderFloat("Max##cmap", &piv_cmap_max[piv_map], piv_cmap_min[piv_map], data_max, fmt);
+        ImGui::SliderFloat("Max##cmap", &correlation_cmap_max[correlation_map], correlation_cmap_min[correlation_map], data_max, fmt);
         ImGui::SameLine();
         if(ImGui::Button("Auto##cmap"))
         {
-            piv_cmap_min[piv_map] = data_min;
-            piv_cmap_max[piv_map] = data_max;
+            correlation_cmap_min[correlation_map] = data_min;
+            correlation_cmap_max[correlation_map] = data_max;
         }
     }
 
@@ -689,7 +689,7 @@ void UI::RebuildValTextures()
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
-    // Build RGBA pixel buffer (temporary — SDL copies it)
+    // Build RGBA pixel buffer (temporary - SDL copies it)
     std::vector<uint8_t> pixels(w * h * 4);
 
     ImPlot::PushColormap(ImPlotColormap_Viridis);
@@ -712,7 +712,7 @@ void UI::RebuildValTextures()
             }
         }
 
-        // Upload to GPU — nearest-neighbor scaling for hard pixel boundaries
+    // Upload to GPU - nearest-neighbor scaling for hard pixel boundaries
         if(val_textures[i]) SDL_DestroyTexture(val_textures[i]);
         val_textures[i] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
                                             SDL_TEXTUREACCESS_STATIC, w, h);
@@ -762,7 +762,7 @@ void UI::DrawVal()
     // --- Physical scale: Val cell spacing -> mm ---
     float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
                      / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = (session.pivparameters.window_size - session.pivparameters.overlap)
+    float px_to_mm = (session.correlatorparameters.window_size - session.correlatorparameters.overlap)
                      * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = field.width  * px_to_mm;
     float field_h_mm = field.height * px_to_mm;
@@ -904,10 +904,10 @@ void UI::DrawSurf()
         last_min = surf_cmap_min; last_max = surf_cmap_max;
     }
 
-    // --- Physical scale: same PIV cell spacing -> mm ---
+    // --- Physical scale: same correlation grid spacing -> mm ---
     float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
                      / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = (session.pivparameters.window_size - session.pivparameters.overlap)
+    float px_to_mm = (session.correlatorparameters.window_size - session.correlatorparameters.overlap)
                      * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = surface.cols() * px_to_mm;
     float field_h_mm = surface.rows() * px_to_mm;
@@ -1357,7 +1357,7 @@ void UI::DrawSavePanel()
 
     std::string base = save_dir + "/" + std::string(name_buf);
 
-    bool any_done = session.GetStageState(STAGE_PIV)   == Done ||
+    bool any_done = session.GetStageState(STAGE_CORRELATION) == Done ||
                     session.GetStageState(STAGE_VAL)   == Done ||
                     session.GetStageState(STAGE_RECON) == Done;
 

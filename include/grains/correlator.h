@@ -5,16 +5,20 @@
 #include <iostream>
 #include <functional>
 #include <fftw3.h>
-#include <wind/pivparameters.h>
+#include <wind/correlatorparameters.h>
 
-/// @brief Particle Image Velocimetry (PIV) cross-correlation engine.
+/// @brief Windowed image correlator for displacement-field estimation.
 ///
 /// Divides the reference and flow images into overlapping interrogation windows
 /// and locates the displacement peak in the normalised cross-correlation map via FFT.
 /// FFTW buffers are pre-allocated in the constructor and reused across calls for efficiency.
-class PIV
+class Correlator
 {
 public:
+    //////////////////////////////////////////////////////
+    // Public Result Types
+    //////////////////////////////////////////////////////
+
     /// @brief Result of a single-window cross-correlation peak search.
     struct PeakResult
     {
@@ -24,15 +28,19 @@ public:
     };
 
 public:
-    PIV();
+    //////////////////////////////////////////////////////
+    // Construction And Main API
+    //////////////////////////////////////////////////////
+
+    Correlator();
 
     /// @brief Construct with explicit window parameters.
-    PIV(const int window_size, const int overlap);
+    Correlator(const int window_size, const int overlap);
 
-    /// @brief Construct from a PIVParameters struct.
-    PIV(const PIVParameters parameters);
+    /// @brief Construct from a CorrelatorParameters struct.
+    Correlator(const CorrelatorParameters parameters);
 
-    ~PIV();
+    ~Correlator();
 
     /// @brief Compute the displacement field between @p reference and @p flow.
     /// @param reference  Normalised float image of the undisturbed background pattern.
@@ -49,6 +57,10 @@ public:
     void SetOverlap(const int overlap);
 
 private:
+    //////////////////////////////////////////////////////
+    // Correlator State
+    //////////////////////////////////////////////////////
+
     int window_size = 64;
     int overlap     = 50;
 
@@ -68,6 +80,10 @@ private:
     fftwf_plan ref_plan  = nullptr;
     fftwf_plan flow_plan = nullptr;
     fftwf_plan inv_plan  = nullptr;
+
+    //////////////////////////////////////////////////////
+    // Internal Helpers
+    //////////////////////////////////////////////////////
 
     void AllocateFFTBuffers();
     void FreeFFTBuffers();

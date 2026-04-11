@@ -11,7 +11,7 @@ struct OpticalParameters
     float n   = 1.45f;  ///< Refractive index of the sample (used for both correction and calibration).
 
     // --- Camera / lens ---
-    float P_px = 2.315f; ///< Sensor pixel pitch (µm).
+    float P_px = 2.315f; ///< Sensor pixel pitch (um).
     float f    = 25.0f;  ///< Lens focal length (mm).
 
     // --- Setup geometry ---

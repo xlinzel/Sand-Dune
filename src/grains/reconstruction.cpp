@@ -115,7 +115,7 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     
     fftwf_destroy_plan(inv_plan);
 
-    // No scaling needed — u/v were fully converted to dn/d(grid index) in Session
+    // No scaling needed - u/v were fully converted to dn/d(grid index) in Session
 
     return surface;
 }

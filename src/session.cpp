@@ -2,7 +2,7 @@
 
 Session::Session()
 {
-    stagestates[STAGE_PIV] = Idle;
+    stagestates[STAGE_CORRELATION] = Idle;
     stagestates[STAGE_VAL] = Idle;
     stagestates[STAGE_RECON] = Idle;
 }
@@ -21,7 +21,7 @@ void Session::LoadRef(const std::string& path)
 
     if(ref.GetLoaded() && !flows.empty() && flows[0].GetLoaded())
     {
-        stagestates[STAGE_PIV] = Ready;
+        stagestates[STAGE_CORRELATION] = Ready;
     }
     
     posx = GetRef().GetWidth() / 2;
@@ -35,10 +35,10 @@ void Session::LoadFlow(const std::vector<std::string>& paths)
     flows.resize(paths.size());
 
     // Reset pipeline
-    stagestates[STAGE_PIV]   = Idle;
+    stagestates[STAGE_CORRELATION] = Idle;
     stagestates[STAGE_VAL]   = Idle;
     stagestates[STAGE_RECON] = Idle;
-    raw_piv_field.clear(); piv_field.clear();
+    raw_correlation_field.clear(); correlation_field.clear();
     raw_val_field.clear(); val_field.clear();
     raw_surface.clear();   surface.clear();
     active_index = 0;
@@ -48,27 +48,27 @@ void Session::LoadFlow(const std::vector<std::string>& paths)
 
     if(ref.GetLoaded() && !flows.empty() && flows[0].GetLoaded())
       {
-          stagestates[STAGE_PIV] = Ready;
+          stagestates[STAGE_CORRELATION] = Ready;
           posx = flows[0].GetWidth()  / 2;
           posy = flows[0].GetHeight() / 2;
       }
 }
 
-void Session::RunPIV()
+void Session::RunCorrelation()
 {
-    if(stagestates[STAGE_PIV] == Idle)
+    if(stagestates[STAGE_CORRELATION] == Idle)
         return;
 
-    PIV piv(pivparameters);
-    raw_piv_field.resize(flows.size());
+    Correlator correlator(correlatorparameters);
+    raw_correlation_field.resize(flows.size());
 
     for(int i = 0; i < (int)flows.size(); i++)
-        raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat());
+        raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat());
 
     if(!n_calibration) ApplyRefractionCorrection();
     ScaleFields();
 
-    stagestates[STAGE_PIV] = Done;
+    stagestates[STAGE_CORRELATION] = Done;
     stagestates[STAGE_VAL] = Ready;
 }
 
@@ -78,11 +78,11 @@ void Session::RunValidation()
         return;
 
     Validation post;
-    raw_val_field.resize(raw_piv_field.size());
+    raw_val_field.resize(raw_correlation_field.size());
 
-    for(int i = 0; i < (int)raw_piv_field.size(); i++)
+    for(int i = 0; i < (int)raw_correlation_field.size(); i++)
     {
-        raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
+        raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
     }
 
     ScaleFields();
@@ -121,12 +121,12 @@ bool Session::IsRunning() const
              activetask.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
 }
 
-void Session::RunPIVAsync()
+void Session::RunCorrelationAsync()
 {
-    if(stagestates[STAGE_PIV] == Idle || IsRunning())
+    if(stagestates[STAGE_CORRELATION] == Idle || IsRunning())
         return;
 
-    stagestates[STAGE_PIV] = Busy;
+    stagestates[STAGE_CORRELATION] = Busy;
     if(stagestates[STAGE_VAL]   == Done) stagestates[STAGE_VAL]   = Dirty;
     if(stagestates[STAGE_RECON] == Done) stagestates[STAGE_RECON] = Dirty;
 
@@ -135,13 +135,13 @@ void Session::RunPIVAsync()
 
     activetask = std::async(std::launch::async, [this]()
     {
-        PIV piv(pivparameters);
+        Correlator correlator(correlatorparameters);
         int n = (int)flows.size();
-        raw_piv_field.resize(n);
+        raw_correlation_field.resize(n);
 
         for(int i = 0; i < n; i++)
         {
-            raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat(),
+            raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat(),
                 [this, i, n](float p){ progress = (i + p) / n; });
         }
 
@@ -150,7 +150,7 @@ void Session::RunPIVAsync()
         if(!n_calibration) ApplyRefractionCorrection();
         ScaleFields();
 
-        stagestates[STAGE_PIV] = Done;
+        stagestates[STAGE_CORRELATION] = Done;
         stagestates[STAGE_VAL] = Ready;
     });
 }
@@ -169,12 +169,12 @@ void Session::RunValidationAsync()
     activetask = std::async(std::launch::async, [this]()
     {
         Validation post;
-        raw_val_field.resize(raw_piv_field.size());
+        raw_val_field.resize(raw_correlation_field.size());
 
-        for(int i = 0; i < (int)raw_piv_field.size(); i++)
+        for(int i = 0; i < (int)raw_correlation_field.size(); i++)
         {
-            raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
-            progress = (float)(i + 1) / raw_piv_field.size();
+            raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
+            progress = (float)(i + 1) / raw_correlation_field.size();
         }
 
         ScaleFields();
@@ -197,7 +197,7 @@ void Session::RunReconstructionAsync()
     {
         if(mask_apply)
         {
-            float step = (float)(pivparameters.window_size - pivparameters.overlap);
+            float step = (float)(correlatorparameters.window_size - correlatorparameters.overlap);
             mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
                 {posx / step, posy / step}, radius / step);
         }
@@ -236,10 +236,10 @@ void Session::RunReconstructionAsync()
 
 void Session::RunAllAsync()
 {
-    if(stagestates[STAGE_PIV] == Idle || IsRunning())
+    if(stagestates[STAGE_CORRELATION] == Idle || IsRunning())
         return;
 
-    stagestates[STAGE_PIV]   = Busy;
+    stagestates[STAGE_CORRELATION] = Busy;
     stagestates[STAGE_VAL]   = Idle;
     stagestates[STAGE_RECON] = Idle;
 
@@ -250,20 +250,20 @@ void Session::RunAllAsync()
     {
         int n = (int)flows.size();
 
-        // --- PIV ---
-        PIV piv(pivparameters);
-        raw_piv_field.resize(n);
+        // --- Correlation ---
+        Correlator correlator(correlatorparameters);
+        raw_correlation_field.resize(n);
 
         for(int i = 0; i < n && !stop_requested; i++)
         {
-            raw_piv_field[i] = piv.Compute(ref.GetMat(), flows[i].GetMat(),
+            raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat(),
                 [this, i, n](float p){ progress = (i + p) / n; });
         }
 
         if(stop_requested) return;
         if(!n_calibration) ApplyRefractionCorrection();
         ScaleFields();
-        stagestates[STAGE_PIV] = Done;
+        stagestates[STAGE_CORRELATION] = Done;
         stagestates[STAGE_VAL] = Busy;
 
         // --- Validation ---
@@ -271,7 +271,7 @@ void Session::RunAllAsync()
         raw_val_field.resize(n);
         for(int i = 0; i < n && !stop_requested; i++)
         {
-            raw_val_field[i] = post.PostProcess(raw_piv_field[i]);
+            raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
             progress = (float)(i + 1) / n;
         }
 
@@ -283,7 +283,7 @@ void Session::RunAllAsync()
         // --- Reconstruction ---
         if(mask_apply)
         {
-            float step = (float)(pivparameters.window_size - pivparameters.overlap);
+            float step = (float)(correlatorparameters.window_size - correlatorparameters.overlap);
             mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
                 {posx / step, posy / step}, radius / step);
         }
@@ -330,7 +330,7 @@ void Session::ComputeRefractionCorrection(int h, int w)
     float t    = opticalparameters.t    * 1e-3f;
     float Z_B  = Z_a + Z_d;
     float z_i  = f * Z_B / (Z_B - f);
-    int   step = pivparameters.window_size - pivparameters.overlap;
+    int   step = correlatorparameters.window_size - correlatorparameters.overlap;
     float m1   = Z_a / z_i;
 
     correction[0] = Eigen::MatrixXf::Zero(h, w);
@@ -366,11 +366,11 @@ void Session::ComputeRefractionCorrection(int h, int w)
 
 void Session::ApplyRefractionCorrection()
 {
-    if(!n_correction || raw_piv_field.empty()) return;
+    if(!n_correction || raw_correlation_field.empty()) return;
 
-    ComputeRefractionCorrection(raw_piv_field[0].height, raw_piv_field[0].width);
+    ComputeRefractionCorrection(raw_correlation_field[0].height, raw_correlation_field[0].width);
 
-    for(auto& field : raw_piv_field)
+    for(auto& field : raw_correlation_field)
     {
         field.u -= correction[0];
         field.v -= correction[1];
@@ -387,7 +387,7 @@ void Session::ComputeThicknessMap()
     float P_px = opticalparameters.P_px * 1e-6f;
     float Z_B  = Z_a + Z_d;
     float z_i  = f * Z_B / (Z_B - f);
-    int   step = pivparameters.window_size - pivparameters.overlap;
+    int   step = correlatorparameters.window_size - correlatorparameters.overlap;
     float m1   = Z_a / z_i;
     float n    = opticalparameters.n;
 
@@ -483,7 +483,7 @@ void Session::ScaleFields()
     float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
     float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
 
-    // In calibration mode PIV/val are kept as raw pixels; surface is computed
+    // In calibration mode correlation/validation fields are kept as raw pixels; surface is computed
     // directly in mm by ComputeThicknessMap() and needs no further scaling.
     float scale = 1.0f;
     if(!n_calibration)
@@ -493,22 +493,22 @@ void Session::ScaleFields()
                         : (opticalparameters.n - 1.0f);         // thickness mode: divide by (n-1)
         term = std::max(term, 0.001f);
 
-        int step = pivparameters.window_size - pivparameters.overlap;
+        int step = correlatorparameters.window_size - correlatorparameters.overlap;
         scale = (float)step * opticalparameters.P_px * 1e-3
                 * (Z_B - opticalparameters.f)
                 / (opticalparameters.f * opticalparameters.Z_d * term);
     }
 
-    if(stagestates[STAGE_PIV] != Idle && stagestates[STAGE_PIV] != Ready)
+    if(stagestates[STAGE_CORRELATION] != Idle && stagestates[STAGE_CORRELATION] != Ready)
     {
-        piv_field.resize(raw_piv_field.size());
-        for(int i = 0; i < (int)raw_piv_field.size(); i++)
+        correlation_field.resize(raw_correlation_field.size());
+        for(int i = 0; i < (int)raw_correlation_field.size(); i++)
         {
-            piv_field[i].u      = raw_piv_field[i].u.array() * scale;
-            piv_field[i].v      = raw_piv_field[i].v.array() * scale;
-            piv_field[i].s2n    = raw_piv_field[i].s2n;
-            piv_field[i].width  = raw_piv_field[i].width;
-            piv_field[i].height = raw_piv_field[i].height;
+            correlation_field[i].u      = raw_correlation_field[i].u.array() * scale;
+            correlation_field[i].v      = raw_correlation_field[i].v.array() * scale;
+            correlation_field[i].s2n    = raw_correlation_field[i].s2n;
+            correlation_field[i].width  = raw_correlation_field[i].width;
+            correlation_field[i].height = raw_correlation_field[i].height;
         }
     }
 
@@ -545,25 +545,25 @@ void Session::SaveAsync(const std::string& base_path)
 
     save_task = std::async(std::launch::async, [this, base_path]()
     {
-        if(stagestates[STAGE_PIV]   == Done) SavePIVCSV(base_path + "_piv.csv");
+        if(stagestates[STAGE_CORRELATION] == Done) SaveCorrelationCSV(base_path + "_correlation.csv");
         if(stagestates[STAGE_VAL]   == Done) SaveValCSV(base_path + "_val.csv");
         if(stagestates[STAGE_RECON] == Done) SaveSurfaceCSV(base_path + "_surface.csv");
     });
 }
 
-void Session::SavePIVCSV(const std::string& base_path)
+void Session::SaveCorrelationCSV(const std::string& base_path)
 {
-    for(int i = 0; i < (int)piv_field.size(); i++)
+    for(int i = 0; i < (int)correlation_field.size(); i++)
     {
         std::string path = base_path;
-        if(piv_field.size() > 1)
+        if(correlation_field.size() > 1)
         {
             auto dot = base_path.rfind('.');
             path = (dot != std::string::npos)
                 ? base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot)
                 : base_path + "_" + std::to_string(i);
         }
-        piv_field[i].SaveCSV(path);
+        correlation_field[i].SaveCSV(path);
     }
 }
 
@@ -654,9 +654,9 @@ int  Session::GetFlowCount() const  { return (int)flows.size(); }
 
 const std::vector<std::string>& Session::GetFlowPaths() const { return flow_paths; }
 
-const VectorField& Session::GetPIVField() const
+const VectorField& Session::GetCorrelationField() const
 {
-    return piv_field[active_index];
+    return correlation_field[active_index];
 }
 
 const VectorField& Session::GetValField() const
