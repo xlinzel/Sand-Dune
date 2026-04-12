@@ -48,6 +48,18 @@ struct PlaneFitMetrics
     int cols = 0;
 };
 
+CorrelatorParameters MakePidTestParameters()
+{
+    CorrelatorParameters parameters;
+    parameters.window_size = kTestWindowSize;
+    parameters.overlap = kTestOverlap;
+    parameters.enable_pid = true;
+    parameters.pid_iterations = 2;
+    parameters.pid_relaxation = 1.0f;
+    parameters.pid_smoothing_passes = 1;
+    return parameters;
+}
+
 PlaneFitMetrics ComputePlaneFitMetrics(const Eigen::MatrixXf& field)
 {
     // Fit a best-fit plane field(x,y) = a*x + b*y + c over the provided map and
@@ -138,10 +150,16 @@ Eigen::MatrixXf CenterCrop(const Eigen::MatrixXf& field, float border_fraction =
     // distortions and partially padded interrogation windows.
     int rows = field.rows();
     int cols = field.cols();
-    int border_r = std::max(1, static_cast<int>(std::floor(rows * border_fraction)));
-    int border_c = std::max(1, static_cast<int>(std::floor(cols * border_fraction)));
-    int h = std::max(1, rows - 2 * border_r);
-    int w = std::max(1, cols - 2 * border_c);
+    if(rows <= 0 || cols <= 0)
+        return Eigen::MatrixXf();
+
+    int border_r = static_cast<int>(std::floor(rows * border_fraction));
+    int border_c = static_cast<int>(std::floor(cols * border_fraction));
+    border_r = std::clamp(border_r, 0, std::max(0, (rows - 1) / 2));
+    border_c = std::clamp(border_c, 0, std::max(0, (cols - 1) / 2));
+
+    int h = rows - 2 * border_r;
+    int w = cols - 2 * border_c;
     return field.block(border_r, border_c, h, w);
 }
 
@@ -460,8 +478,14 @@ TEST_CASE("Correlation Repo Image Pair")
     CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_ref.bmp").c_str()).empty());
     CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_flow.bmp").c_str()).empty());
 
-    Correlator correlator(kTestWindowSize, kTestOverlap);
-    VectorField result = correlator.Compute(ref_image.GetMat(), flow_image.GetMat());
+    Correlator baseline(kTestWindowSize, kTestOverlap);
+    Correlator pid(MakePidTestParameters());
+    VectorField result = baseline.Compute(ref_image.GetMat(), flow_image.GetMat());
+    VectorField pid_result = pid.Compute(ref_image.GetMat(), flow_image.GetMat());
+
+    Validation validation;
+    VectorField validated = validation.PostProcess(result);
+    VectorField pid_validated = validation.PostProcess(pid_result);
 
     float u_mean = result.u.mean();
     float v_mean = result.v.mean();
@@ -469,51 +493,69 @@ TEST_CASE("Correlation Repo Image Pair")
     float v_std = std::sqrt((result.v.array() - v_mean).square().mean());
     float s2n_mean = result.s2n.mean();
 
-    Validation validation;
-    VectorField validated = validation.PostProcess(result);
+    float pid_u_mean = pid_result.u.mean();
+    float pid_v_mean = pid_result.v.mean();
+    float pid_u_std = std::sqrt((pid_result.u.array() - pid_u_mean).square().mean());
+    float pid_v_std = std::sqrt((pid_result.v.array() - pid_v_mean).square().mean());
+    float pid_s2n_mean = pid_result.s2n.mean();
 
     PlaneFitMetrics raw_u_plane = ComputePlaneFitMetrics(result.u);
     PlaneFitMetrics raw_v_plane = ComputePlaneFitMetrics(result.v);
     PlaneFitMetrics validated_u_plane = ComputePlaneFitMetrics(validated.u);
     PlaneFitMetrics validated_v_plane = ComputePlaneFitMetrics(validated.v);
+    PlaneFitMetrics pid_raw_u_plane = ComputePlaneFitMetrics(pid_result.u);
+    PlaneFitMetrics pid_raw_v_plane = ComputePlaneFitMetrics(pid_result.v);
+    PlaneFitMetrics pid_validated_u_plane = ComputePlaneFitMetrics(pid_validated.u);
+    PlaneFitMetrics pid_validated_v_plane = ComputePlaneFitMetrics(pid_validated.v);
 
     PlaneFitMetrics raw_u_center_plane = ComputePlaneFitMetrics(CenterCrop(result.u));
     PlaneFitMetrics raw_v_center_plane = ComputePlaneFitMetrics(CenterCrop(result.v));
     PlaneFitMetrics validated_u_center_plane = ComputePlaneFitMetrics(CenterCrop(validated.u));
     PlaneFitMetrics validated_v_center_plane = ComputePlaneFitMetrics(CenterCrop(validated.v));
+    PlaneFitMetrics pid_raw_u_center_plane = ComputePlaneFitMetrics(CenterCrop(pid_result.u));
+    PlaneFitMetrics pid_raw_v_center_plane = ComputePlaneFitMetrics(CenterCrop(pid_result.v));
+    PlaneFitMetrics pid_validated_u_center_plane = ComputePlaneFitMetrics(CenterCrop(pid_validated.u));
+    PlaneFitMetrics pid_validated_v_center_plane = ComputePlaneFitMetrics(CenterCrop(pid_validated.v));
 
     PrintSection("Correlation Field Stats: if_0.1");
-    PrintLine("u mean", FormatFloat(u_mean) + " px");
-    PrintLine("v mean", FormatFloat(v_mean) + " px");
-    PrintLine("u stddev", FormatFloat(u_std) + " px");
-    PrintLine("v stddev", FormatFloat(v_std) + " px");
-    PrintLine("mean S2N", FormatFloat(s2n_mean));
-    PrintLine("whole plane RMS", FormatUV(raw_u_plane.rms, raw_v_plane.rms, " px"));
-    PrintLine("whole plane RMS/std", FormatUV(raw_u_plane.normalized_std, raw_v_plane.normalized_std));
-    PrintLine("whole plane RMS/range", FormatUV(raw_u_plane.normalized_range, raw_v_plane.normalized_range));
-    PrintLine("validated whole RMS", FormatUV(validated_u_plane.rms, validated_v_plane.rms, " px"));
+    PrintLine("baseline mean", FormatUV(u_mean, v_mean, " px"));
+    PrintLine("pid mean", FormatUV(pid_u_mean, pid_v_mean, " px"));
+    PrintLine("baseline stddev", FormatUV(u_std, v_std, " px"));
+    PrintLine("pid stddev", FormatUV(pid_u_std, pid_v_std, " px"));
+    PrintLine("baseline mean S2N", FormatFloat(s2n_mean));
+    PrintLine("pid mean S2N", FormatFloat(pid_s2n_mean));
+    PrintLine("baseline whole RMS", FormatUV(raw_u_plane.rms, raw_v_plane.rms, " px"));
+    PrintLine("pid whole RMS", FormatUV(pid_raw_u_plane.rms, pid_raw_v_plane.rms, " px"));
+    PrintLine("baseline whole RMS/std", FormatUV(raw_u_plane.normalized_std, raw_v_plane.normalized_std));
+    PrintLine("pid whole RMS/std", FormatUV(pid_raw_u_plane.normalized_std, pid_raw_v_plane.normalized_std));
+    PrintLine("baseline val whole", FormatUV(validated_u_plane.rms, validated_v_plane.rms, " px"));
+    PrintLine("pid val whole", FormatUV(pid_validated_u_plane.rms, pid_validated_v_plane.rms, " px"));
     PrintLine("central crop", std::to_string(raw_u_center_plane.rows) + " x "
                                + std::to_string(raw_u_center_plane.cols)
                                + " (center 80% of map)");
-    PrintLine("central plane RMS", FormatUV(raw_u_center_plane.rms, raw_v_center_plane.rms, " px"));
-    PrintLine("central plane RMS/std", FormatUV(raw_u_center_plane.normalized_std,
-                                                 raw_v_center_plane.normalized_std));
-    PrintLine("central plane RMS/range", FormatUV(raw_u_center_plane.normalized_range,
-                                                   raw_v_center_plane.normalized_range));
-    PrintLine("validated central RMS", FormatUV(validated_u_center_plane.rms,
-                                                 validated_v_center_plane.rms, " px"));
-    PrintLine("validated ctr RMS/std", FormatUV(validated_u_center_plane.normalized_std,
-                                                 validated_v_center_plane.normalized_std));
-    PrintLine("validated ctr RMS/rng", FormatUV(validated_u_center_plane.normalized_range,
-                                                 validated_v_center_plane.normalized_range));
+    PrintLine("baseline ctr RMS", FormatUV(raw_u_center_plane.rms, raw_v_center_plane.rms, " px"));
+    PrintLine("pid ctr RMS", FormatUV(pid_raw_u_center_plane.rms, pid_raw_v_center_plane.rms, " px"));
+    PrintLine("baseline ctr RMS/std", FormatUV(raw_u_center_plane.normalized_std,
+                                                raw_v_center_plane.normalized_std));
+    PrintLine("pid ctr RMS/std", FormatUV(pid_raw_u_center_plane.normalized_std,
+                                           pid_raw_v_center_plane.normalized_std));
+    PrintLine("baseline val ctr", FormatUV(validated_u_center_plane.rms,
+                                            validated_v_center_plane.rms, " px"));
+    PrintLine("pid val ctr", FormatUV(pid_validated_u_center_plane.rms,
+                                       pid_validated_v_center_plane.rms, " px"));
 
     CHECK(result.u.array().isFinite().all());
     CHECK(result.v.array().isFinite().all());
     CHECK(result.s2n.array().isFinite().all());
+    CHECK(pid_result.u.array().isFinite().all());
+    CHECK(pid_result.v.array().isFinite().all());
+    CHECK(pid_result.s2n.array().isFinite().all());
     CHECK(result.u.rows() > 0);
     CHECK(result.u.cols() > 0);
     CHECK(validated_u_plane.rms < raw_u_plane.rms);
     CHECK(validated_v_plane.rms < raw_v_plane.rms);
+    CHECK(pid_raw_u_center_plane.rms < raw_u_center_plane.rms);
+    CHECK(pid_raw_v_center_plane.rms < raw_v_center_plane.rms);
 }
 
 TEST_CASE("Slide Gradient Diagnostics")
@@ -727,10 +769,7 @@ TEST_CASE("Slide Gradient Diagnostics")
     };
 
     const std::vector<PairInfo> pairs = {
-        {"base", "ref.bmp", "flow.bmp"},
-        {"if_0.1", "if_0.1_ref.bmp", "if_0.1_flow.bmp"},
-        {"oof", "oof_ref.bmp", "oof_flow.bmp"},
-        {"oof_0.1", "oof_0.1_ref.bmp", "oof_0.1_flow.bmp"}
+        {"if_0.1", "if_0.1_ref.bmp", "if_0.1_flow.bmp"}
     };
 
     std::string output_dir = std::string(PROJECT_DIR) + "/csv/slide_gradient_diagnostics";

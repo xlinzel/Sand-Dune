@@ -35,7 +35,7 @@ enum Stages
 {
     STAGE_CORRELATION, ///< Cross-correlation stage.
     STAGE_VAL,   ///< Validation and outlier replacement stage.
-    STAGE_RECON, ///< Surface reconstruction (or thickness map in calibration mode).
+    STAGE_RECON, ///< Surface reconstruction stage.
     STAGE_TOTAL  ///< Sentinel - total number of stages.
 };
 
@@ -45,14 +45,9 @@ enum Stages
 /// refraction correction, result scaling, and async execution.  A single Session instance is
 /// shared between the UI and the compute back-end.
 ///
-/// ### Normal mode (@p n_calibration = false)
-/// The pipeline produces refractive-index gradient maps (dn/dx, dn/dy) that are integrated
-/// by Frankot-Chellappa reconstruction into a surface height (dn) map.
-///
-/// ### Calibration mode (@p n_calibration = true)
-/// Refraction correction is skipped.  After validation the pipeline inverts the refraction
-/// geometry to estimate the physical sample thickness from the measured pixel displacements,
-/// enabling system calibration against a known reference sample.
+/// The pipeline produces corrected displacement-gradient maps that are integrated
+/// by Frankot-Chellappa reconstruction into either a refractive-index variation
+/// map or a thickness-variation map, depending on @p b_ref.
 class Session
 {
 public:
@@ -85,10 +80,7 @@ public:
     /// @brief Run validation and outlier replacement on correlation results (blocking).
     void RunValidation();
 
-    /// @brief Run surface reconstruction or thickness-map computation (blocking).
-    ///
-    /// In normal mode calls Reconstruction::Compute() followed by ScaleFields().
-    /// In calibration mode (@p n_calibration = true) calls ComputeThicknessMap().
+    /// @brief Run surface reconstruction (blocking).
     void RunReconstruction();
 
     ///@}
@@ -117,9 +109,7 @@ public:
 
     /// @brief Convert raw pixel displacements to physical units (dn or mm) using the optical parameters.
     ///
-    /// In normal mode scales correlation/validation fields and the reconstructed surface.
-    /// In calibration mode (@p n_calibration = true) the correlation/validation fields are left in pixels
-    /// and the surface is already in mm, so this call is a no-op for those outputs.
+    /// Scales correlation/validation fields and the reconstructed surface.
     void ScaleFields();
 
     ///@}
@@ -136,7 +126,7 @@ public:
 
     void SaveCorrelationCSV(const std::string& base_path); ///< Write scaled correlation fields to CSV.
     void SaveValCSV(const std::string& base_path);     ///< Write validated fields to CSV.
-    void SaveSurfaceCSV(const std::string& base_path); ///< Write the surface / thickness map to CSV.
+    void SaveSurfaceCSV(const std::string& base_path); ///< Write the surface map to CSV.
 
     ///@}
 
@@ -159,8 +149,10 @@ public:
     const std::vector<std::string>& GetFlowPaths() const;
 
     const VectorField&    GetCorrelationField() const; ///< Scaled correlation field for the active frame.
+    const VectorField&    GetRawCorrelationField() const; ///< Unscaled correlation field for the active frame (pixels).
     const VectorField&    GetValField()  const; ///< Validated field for the active frame.
-    const Eigen::MatrixXf& GetSurface() const; ///< Reconstructed surface or thickness map for the active frame.
+    const VectorField&    GetRawValField()  const; ///< Unscaled validated field for the active frame (pixels).
+    const Eigen::MatrixXf& GetSurface() const; ///< Reconstructed surface for the active frame.
 
     /// @brief Query the current state of a pipeline stage.
     StageState GetStageState(Stages s) const;
@@ -192,8 +184,7 @@ public:
     /// @name Processing flags
     // -------------------------------------------------------------------------
     ///@{
-    bool n_correction  = true;  ///< Apply refraction correction to correlation results (normal mode only).
-    bool n_calibration = false; ///< Calibration mode: invert refraction to estimate sample thickness.
+    bool n_correction  = true;  ///< Apply refraction correction to correlation results.
     bool b_ref         = true;  ///< Show refractive-index units (dn) when true; thickness (mm) when false.
     ///@}
 
@@ -219,22 +210,16 @@ private:
     /// @brief Subtract the pre-computed correction matrices from all raw_correlation_field entries.
     void ApplyRefractionCorrection();
 
-    /// @brief Invert the refraction geometry to estimate sample thickness from validated displacements.
-    ///
-    /// Used in calibration mode (@p n_calibration = true).  Results are stored in raw_surface
-    /// and surface in millimetres.
-    void ComputeThicknessMap();
-
     ///@}
 
-    std::vector<VectorField> raw_correlation_field; ///< Per-frame correlation fields before refraction correction.
+    std::vector<VectorField> raw_correlation_field; ///< Per-frame correlation fields in pixel units after correction.
     std::vector<VectorField> correlation_field;     ///< Per-frame correlation fields after correction and scaling.
     Eigen::MatrixXf correction[2];          ///< Refraction correction matrices for u [0] and v [1].
 
-    std::vector<VectorField> raw_val_field; ///< Per-frame validated fields before scaling.
+    std::vector<VectorField> raw_val_field; ///< Per-frame validated fields in pixel units.
     std::vector<VectorField> val_field;     ///< Per-frame validated fields after scaling.
 
-    std::vector<Eigen::MatrixXf> raw_surface; ///< Per-frame surfaces before scaling (metres in calibration mode).
+    std::vector<Eigen::MatrixXf> raw_surface; ///< Per-frame surfaces before scaling.
     std::vector<Eigen::MatrixXf> surface;     ///< Per-frame surfaces in final display units (dn or mm).
 
     int active_index = 0;

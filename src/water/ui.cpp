@@ -237,8 +237,6 @@ void UI::DrawParametersPanel()
     if(ImGui::RadioButton("Thickness Variation (uniform n)", session.b_ref == false)) session.b_ref = false;
 
     ImGui::Checkbox("Field Correction", &session.n_correction);
-    ImGui::SameLine(180.0f);
-    ImGui::Checkbox("Calibration Field", &session.n_calibration);
 
     ImGui::PushItemWidth(-230.0f);
     
@@ -526,6 +524,18 @@ void UI::DrawPipelinePanel()
 
 void UI::DrawVisualizationPanel()
 {
+    ImGui::Begin("Visualization");
+
+    bool previous_show_raw = show_raw_displacements;
+    ImGui::Checkbox("Show Correlation/Validation In Raw Pixels", &show_raw_displacements);
+    if(show_raw_displacements != previous_show_raw)
+    {
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+    }
+
+    ImGui::End();
+
     // Track state transitions here so Draw* functions see them even when not called during Busy
     static StageState last_correlation = Idle;
     static StageState last_val  = Idle;
@@ -558,7 +568,9 @@ void UI::DrawVisualizationPanel()
 
 void UI::RebuildCorrelationTextures()
 {
-    const VectorField& field = session.GetCorrelationField();
+    const VectorField& field = show_raw_displacements
+        ? session.GetRawCorrelationField()
+        : session.GetCorrelationField();
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
@@ -599,7 +611,9 @@ void UI::DrawCorrelation()
 {
     ImGui::Begin("Correlation Results");
 
-    const VectorField& field = session.GetCorrelationField();
+    const VectorField& field = show_raw_displacements
+        ? session.GetRawCorrelationField()
+        : session.GetCorrelationField();
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
@@ -663,8 +677,8 @@ void UI::DrawCorrelation()
             const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
-                const char* unit = session.n_calibration ? " px"
-                                 : (correlation_map == 0) ? " dn/du" : (correlation_map == 1) ? " dn/dv" : "";
+                const char* unit = (correlation_map == 2) ? ""
+                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/grid" : " mm/grid";
                 ImGui::SetTooltip("%.4f%s", (*maps[correlation_map])(row, col), unit);
             }
         }
@@ -709,7 +723,9 @@ void UI::DrawCorrelation()
 
 void UI::RebuildValTextures()
 {
-    const VectorField& field = session.GetValField();
+    const VectorField& field = show_raw_displacements
+        ? session.GetRawValField()
+        : session.GetValField();
     const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
     int w = field.width, h = field.height;
 
@@ -750,7 +766,9 @@ void UI::DrawVal()
 {
     ImGui::Begin("Val Results");
 
-    const VectorField& field = session.GetValField();
+    const VectorField& field = show_raw_displacements
+        ? session.GetRawValField()
+        : session.GetValField();
 
     // --- Invalidate textures when Validation reruns ---
     static StageState last_val_state = Idle;
@@ -821,8 +839,8 @@ void UI::DrawVal()
             const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
-                const char* unit = session.n_calibration ? " px"
-                                 : (val_map == 0) ? " dn/du" : (val_map == 1) ? " dn/dv" : "";
+                const char* unit = (val_map == 2) ? ""
+                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/grid" : " mm/grid";
                 ImGui::SetTooltip("%.4f%s", (*maps[val_map])(row, col), unit);
             }
         }
@@ -945,8 +963,8 @@ void UI::DrawSurf()
     float plot_h     = std::min(avail_h, avail_w * ratio);
     float plot_w     = plot_h / ratio;
 
-    const char* units     = session.n_calibration ? "mm"      : session.b_ref ? "dn" : "mm";
-    const char* scale_lbl = session.n_calibration ? "t (mm)"  : session.b_ref ? "dn" : "t (mm)";
+    const char* units     = session.b_ref ? "dn" : "mm";
+    const char* scale_lbl = session.b_ref ? "dn" : "t (mm)";
 
     // --- Surface plot ---
     if(ImPlot::BeginPlot("##surfplot", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
