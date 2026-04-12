@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <fftw3.h>
 #include <cmath>
+#include <limits>
 #include <numeric>
 
 //////////////////////////////////////////////////////
@@ -18,9 +19,11 @@ constexpr float kNewtonStepClamp = 0.25f;
 constexpr float kNearBoundaryThreshold = 0.45f;
 constexpr float kPeakLockThreshold = 0.47f;
 
-// Per-evaluation output of the local CMM objective.
-// This is the information the Gauss-Newton loop needs at one candidate
-// sub-pixel position: residual value, gradient, and a Gauss-Newton Hessian.
+/// @brief Per-candidate evaluation of the local CMM objective.
+///
+/// This is the state the Gauss-Newton solver needs at one sub-pixel candidate:
+/// the residual value from paper eq. (9), its gradient, and the Gauss-Newton
+/// Hessian approximation.
 struct CmmEvalResult
 {
     float eps = 1e30f; // Eq. (9) residual.
@@ -31,10 +34,11 @@ struct CmmEvalResult
     float H_vv = 0.0f; // Gauss-Newton Hessian term.
 };
 
-// Best-known solution inside one integer correlation cell.
-// FindPeak() first chooses the discrete peak cell, SolveCell() refines the
-// sub-pixel offset inside that cell, and the final displacement is
-// (int_u + du, int_v + dv).
+/// @brief Best-known sub-pixel solution inside one integer peak cell.
+///
+/// `FindPeak()` chooses the discrete peak cell first, then `SolveCell()`
+/// refines the local sub-pixel offset `(du, dv)` while keeping that integer
+/// cell fixed. The final displacement is `(int_u + du, int_v + dv)`.
 struct CmmCellSolution
 {
     float du = 0.0f;   // Local sub-pixel u' in this cell.
@@ -47,9 +51,10 @@ struct CmmCellSolution
     bool valid = false;
 };
 
-// Cached 1D bicubic interpolation weights for one row/column of the 5x5
-// patch. Evaluate() builds these once per candidate shift and reuses them
-// across the 2D interpolation loops.
+/// @brief Cached 1D bicubic interpolation basis for one patch row or column.
+///
+/// `Evaluate()` builds these weights once per candidate shift and reuses them
+/// across the full 2D `5x5` patch evaluation.
 struct BicubicBasis1D
 {
     int base = 0;     // Left integer support sample.
@@ -57,14 +62,17 @@ struct BicubicBasis1D
     float dw[4] = {}; // Weight derivatives wrt shift.
 };
 
-// The CMM fit requires a full 5x5 patch around the correlation peak, so peaks
-// too close to the map border fall back to integer precision.
+/// @brief Check whether the discrete peak is too close to the map edge for CMM.
+///
+/// The CMM fit needs a full `5x5` neighborhood around the peak. Border-adjacent
+/// peaks fall back to integer precision because that patch is incomplete.
 bool IsPeakTooCloseToEdge(const Eigen::MatrixXf& ccmap, int row, int col)
 {
     return (row == 0 || row == ccmap.rows() - 1 || col == 0 || col == ccmap.cols() - 1)
         || row == 1 || row == ccmap.rows() - 2 || col == 1 || col == ccmap.cols() - 2;
 }
 
+/// @brief Cubic convolution weight used by CMM bicubic interpolation.
 float CubicWeight(float x)
 {
     x = std::abs(x);
@@ -75,6 +83,7 @@ float CubicWeight(float x)
     return 0.0f;
 }
 
+/// @brief Derivative of the cubic convolution weight with respect to shift.
 float CubicDerivative(float x)
 {
     float sign = (x < 0.0f) ? -1.0f : 1.0f;
@@ -87,14 +96,19 @@ float CubicDerivative(float x)
     return 0.0f;
 }
 
+/// @brief Return the larger absolute local offset magnitude.
+///
+/// This is used to detect solutions that sit close to the local `+/-0.5`
+/// sub-pixel boundary and may need neighboring-cell handoff.
 float OffsetExtent(float du, float dv)
 {
     return std::max(std::abs(du), std::abs(dv));
 }
 
-// Choose between two cell-local solutions after the main solve and optional
-// handoff. Residual wins first; when two cells are nearly tied, prefer the one
-// less pinned against the +/-0.5 local boundary.
+/// @brief Compare two cell-local CMM solutions and choose the better representation.
+///
+/// Residual wins first. When two solutions are nearly tied, prefer the one less
+/// pinned against the local `+/-0.5` sub-pixel boundary.
 bool BetterCell(const CmmCellSolution& candidate, const CmmCellSolution& current)
 {
     constexpr float eps_tol = 5e-4f;
@@ -119,9 +133,10 @@ bool BetterCell(const CmmCellSolution& candidate, const CmmCellSolution& current
     return cand_extent + 1e-4f < current_extent;
 }
 
-// Standard peak-to-second-peak ratio used throughout the pipeline as a quality
-// metric. This is independent of the CMM solve and is computed from the final
-// chosen correlation peak location.
+/// @brief Compute the standard peak-to-second-peak signal-to-noise ratio.
+///
+/// This quality metric is independent of the CMM fit and is measured from the
+/// final chosen discrete peak location.
 float ComputeSignalToNoise(const Eigen::MatrixXf& ccmap, int row, int col)
 {
     Eigen::MatrixXf ccmap_flattened = ccmap.array() - ccmap.minCoeff();
@@ -141,10 +156,11 @@ float ComputeSignalToNoise(const Eigen::MatrixXf& ccmap, int row, int col)
     return primary_peak / second_peak;
 }
 
-// File-local state bundle for one FindPeak() call.
-// This keeps the CMM machinery together: the measured correlation map, the
-// reference autocorrelation patch R, timing sinks, and the helper methods that
-// evaluate and solve the paper's local residual.
+/// @brief File-local state bundle for one `FindPeak()` call.
+///
+/// This keeps the measured correlation map, the saved reference FFT, the local
+/// autocorrelation patch `R`, and the helper methods used by the CMM solve in
+/// one place.
 struct PeakSearchContext
 {
     const Eigen::MatrixXf& ccmap;
@@ -157,11 +173,12 @@ struct PeakSearchContext
     fftwf_plan inv_plan;
     float R[2 * kAutocorrelationRadius + 1][2 * kAutocorrelationRadius + 1] = {}; // Local autocorrelation patch.
 
+    /// @brief Build the local reference autocorrelation patch `R`.
+    ///
+    /// This corresponds to the paper's autocorrelation surface used to predict
+    /// the shifted correlation patch under a sub-pixel displacement.
     void BuildAutocorrelationPatch()
     {
-        // Paper step 3 / eqs. (5)-(6): build the local reference autocorrelation R.
-        // The CMM prediction for a sub-pixel shift is obtained by sampling this
-        // autocorrelation surface with bicubic interpolation.
         for(int i = 0; i < rows * freq_cols; i++)
         {
             product[i][0] = ref_out_saved[i][0] * ref_out_saved[i][0]
@@ -182,13 +199,12 @@ struct PeakSearchContext
         }
     }
 
+    /// @brief Extract and mean-normalize the measured `5x5` peak patch `phi`.
+    ///
+    /// The normalized patch is the measured target used by the CMM residual in
+    /// paper eq. (9).
     bool ExtractNormalizedPeakPatch(int cell_row, int cell_col, float (&phi_norm)[25])
     {
-        // Paper steps 1-2 and eq. (9): extract the measured 5x5 correlation
-        // neighbourhood phi around the discrete peak cell, then normalize by
-        // its mean so the residual compares the patch shape rather than scale.
-        // This normalized phi patch is the measured target used by every later
-        // helper in this context.
         float phi[25] = {}; // Measured 5x5 peak patch.
         for(int m = -kPeakPatchRadius; m <= kPeakPatchRadius; m++)
         {
@@ -209,11 +225,12 @@ struct PeakSearchContext
         return true;
     }
 
+    /// @brief Precompute the 1D bicubic interpolation basis for one axis.
+    ///
+    /// This avoids rebuilding the same cubic support and derivative weights for
+    /// every sample inside a full `5x5` patch evaluation.
     void BuildBasis(BicubicBasis1D (&basis)[5], float shift) const
     {
-        // For one axis of the 5x5 patch, precompute the 4-sample bicubic
-        // support and derivative weights used by Evaluate(). This avoids
-        // rebuilding the same interpolation stencil for every sample.
         for(int i = 0; i < 5; i++)
         {
             float pos = static_cast<float>(i - kPeakPatchRadius) - shift; // Shifted patch coordinate.
@@ -230,12 +247,13 @@ struct PeakSearchContext
         }
     }
 
+    /// @brief Evaluate the paper's local CMM objective at one sub-pixel shift.
+    ///
+    /// This builds the predicted patch `phi'` by bicubically sampling `R`,
+    /// normalizes it, and accumulates the residual, gradient, and Gauss-Newton
+    /// Hessian used by the local solver.
     CmmEvalResult Evaluate(const float (&phi_norm)[25], float du, float dv) const
     {
-        // Paper eqs. (5)-(6): evaluate the predicted correlation patch phi'
-        // for the current sub-pixel shift (du, dv) by bicubically sampling R.
-        // We also accumulate first derivatives so eq. (9) can be minimized with
-        // a local Gauss-Newton solve instead of only a dense grid scan.
         BicubicBasis1D x_basis[5];
         BicubicBasis1D y_basis[5];
         BuildBasis(x_basis, du);
@@ -318,13 +336,15 @@ struct PeakSearchContext
         return out;
     }
 
+    /// @brief Search a bounded sub-pixel grid for a lower CMM residual.
+    ///
+    /// The paper uses dense scanning to minimize eq. (9). This implementation
+    /// uses the grid search only as a local refinement or fallback around the
+    /// faster Gauss-Newton estimate.
     void SearchGrid(const float (&phi_norm)[25],
                     float u_min, float u_max, float v_min, float v_max, float step,
                     float& best_u, float& best_v, CmmEvalResult& best) const
     {
-        // The paper minimizes eq. (9) by scanning the sub-pixel space. Here we
-        // keep a small grid search as a refinement/fallback around the faster
-        // Gauss-Newton estimate.
         u_min = std::clamp(u_min, -kSubpixelClamp, kSubpixelClamp);
         u_max = std::clamp(u_max, -kSubpixelClamp, kSubpixelClamp);
         v_min = std::clamp(v_min, -kSubpixelClamp, kSubpixelClamp);
@@ -353,14 +373,13 @@ struct PeakSearchContext
         }
     }
 
+    /// @brief Solve the local CMM problem inside one integer peak cell.
+    ///
+    /// The integer peak location is held fixed while the sub-pixel offset is
+    /// refined using Gaussian seeding, Gauss-Newton updates, and bounded grid
+    /// searches when needed.
     CmmCellSolution SolveCell(int cell_row, int cell_col, bool use_hint, float hint_u, float hint_v)
     {
-        // Paper step 4 within one integer peak cell: solve only the local
-        // sub-pixel offsets (u', v') while the discrete peak location stays
-        // fixed. The final displacement is added back in FindPeak().
-        // This helper is the main bridge between the paper math and the final
-        // implementation: seed, evaluate, Gauss-Newton refine, and optionally
-        // run small fallback searches before returning one cell-local answer.
         CmmCellSolution solution;
         if(cell_row <= 1 || cell_row >= ccmap.rows() - 2 || cell_col <= 1 || cell_col >= ccmap.cols() - 2)
             return solution;
@@ -506,7 +525,8 @@ Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap)
         return PeakResult{
             float(col - ccmap.cols() / 2),
             float(row - ccmap.rows() / 2),
-            ComputeSignalToNoise(ccmap, row, col)
+            ComputeSignalToNoise(ccmap, row, col),
+            std::numeric_limits<float>::infinity()
         };
     }
 
@@ -539,8 +559,6 @@ Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap)
         // When the optimum lands close to the edge of the current cell, also
         // evaluate the neighbouring integer peak cell and keep the lower-residual
         // representation. This reduces boundary locking near +/-0.5 pixels.
-        // This is still per-window and local: no neighbouring vectors are used,
-        // only alternative representations of the same peak inside nearby cells.
         int u_offsets[2] = {0, 0}; // Candidate neighboring u cells.
         int v_offsets[2] = {0, 0}; // Candidate neighboring v cells.
         int u_count = 1;
@@ -592,5 +610,10 @@ Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap)
     float u = best_cell.int_u + best_cell.du;
     float v = best_cell.int_v + best_cell.dv;
 
-    return PeakResult{u, v, ComputeSignalToNoise(ccmap, row, col)};
+    return PeakResult{
+        u,
+        v,
+        ComputeSignalToNoise(ccmap, row, col),
+        std::isfinite(best_cell.eps) ? best_cell.eps : std::numeric_limits<float>::infinity()
+    };
 }

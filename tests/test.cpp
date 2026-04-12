@@ -89,6 +89,48 @@ PlaneFitMetrics ComputePlaneFitMetrics(const Eigen::MatrixXf& field)
     return metrics;
 }
 
+float ComputeFieldRmse(const VectorField& field, int window_size, int overlap,
+                       const std::function<Eigen::Vector2f(float, float)>& expected_displacement,
+                       float border_fraction = 0.10f)
+{
+    if(field.width == 0 || field.height == 0)
+        return 0.0f;
+
+    int row_start = std::max(0, static_cast<int>(std::floor(field.height * border_fraction)));
+    int col_start = std::max(0, static_cast<int>(std::floor(field.width * border_fraction)));
+    int row_end = std::min(field.height, field.height - row_start);
+    int col_end = std::min(field.width, field.width - col_start);
+
+    if(row_start >= row_end || col_start >= col_end)
+    {
+        row_start = 0;
+        col_start = 0;
+        row_end = field.height;
+        col_end = field.width;
+    }
+
+    float half_extent = 0.5f * static_cast<float>(window_size - 1);
+    int movement = window_size - overlap;
+    double sum_sq = 0.0;
+    int count = 0;
+
+    for(int row = row_start; row < row_end; row++)
+    {
+        for(int col = col_start; col < col_end; col++)
+        {
+            float x = col * movement + half_extent;
+            float y = row * movement + half_extent;
+            Eigen::Vector2f expected = expected_displacement(x, y);
+            float du = field.u(row, col) - expected.x();
+            float dv = field.v(row, col) - expected.y();
+            sum_sq += static_cast<double>(du * du + dv * dv);
+            count++;
+        }
+    }
+
+    return count > 0 ? static_cast<float>(std::sqrt(sum_sq / count)) : 0.0f;
+}
+
 Eigen::MatrixXf CenterCrop(const Eigen::MatrixXf& field, float border_fraction = 0.10f)
 {
     // Remove 10% from each edge by default, leaving the central 80% of the map.
@@ -267,6 +309,145 @@ TEST_CASE("Correlator Computation")
             CHECK(std::abs(result.u.mean() - shift.x()) < 0.08f);
             CHECK(std::abs(result.v.mean() - shift.y()) < 0.08f);
         }
+    }
+
+    SUBCASE("PID Affine Deformation")
+    {
+        constexpr int image_size = 192;
+        constexpr int spot_count = 160;
+        constexpr float sigma = 1.1f;
+
+        std::mt19937 rng(2468);
+        std::uniform_real_distribution<float> dist(14.0f, image_size - 14.0f);
+        std::vector<Eigen::Vector2f> centers;
+        centers.reserve(spot_count);
+        for(int i = 0; i < spot_count; i++)
+            centers.emplace_back(dist(rng), dist(rng));
+
+        Eigen::Vector2f image_center(0.5f * static_cast<float>(image_size - 1),
+                                     0.5f * static_cast<float>(image_size - 1));
+
+        constexpr float u0 = 1.15f;
+        constexpr float v0 = -0.75f;
+        constexpr float du_dx = 0.0105f;
+        constexpr float du_dy = 0.0040f;
+        constexpr float dv_dx = -0.0035f;
+        constexpr float dv_dy = 0.0085f;
+
+        auto displacement = [&](float x, float y) -> Eigen::Vector2f
+        {
+            float dx = x - image_center.x();
+            float dy = y - image_center.y();
+            return Eigen::Vector2f(
+                u0 + du_dx * dx + du_dy * dy,
+                v0 + dv_dx * dx + dv_dy * dy);
+        };
+
+        auto render_reference = [&]()
+        {
+            Eigen::MatrixXf img = Eigen::MatrixXf::Zero(image_size, image_size);
+            const float radius = 4.0f * sigma;
+            const float denom = 2.0f * sigma * sigma;
+
+            for(const Eigen::Vector2f& center : centers)
+            {
+                float cx = center.x();
+                float cy = center.y();
+
+                int x0 = std::max(0, static_cast<int>(std::floor(cx - radius)));
+                int x1 = std::min(image_size - 1, static_cast<int>(std::ceil(cx + radius)));
+                int y0 = std::max(0, static_cast<int>(std::floor(cy - radius)));
+                int y1 = std::min(image_size - 1, static_cast<int>(std::ceil(cy + radius)));
+
+                for(int y = y0; y <= y1; y++)
+                {
+                    for(int x = x0; x <= x1; x++)
+                    {
+                        float dxp = x - cx;
+                        float dyp = y - cy;
+                        img(y, x) += std::exp(-(dxp * dxp + dyp * dyp) / denom);
+                    }
+                }
+            }
+
+            return img;
+        };
+
+        auto sample_bilinear = [&](const Eigen::MatrixXf& image, float row, float col) -> float
+        {
+            int r0 = static_cast<int>(std::floor(row));
+            int c0 = static_cast<int>(std::floor(col));
+            int r1 = r0 + 1;
+            int c1 = c0 + 1;
+
+            float tr = row - static_cast<float>(r0);
+            float tc = col - static_cast<float>(c0);
+
+            auto sample = [&](int r, int c) -> float
+            {
+                if(r < 0 || r >= image.rows() || c < 0 || c >= image.cols())
+                    return 0.0f;
+                return image(r, c);
+            };
+
+            float v00 = sample(r0, c0);
+            float v01 = sample(r0, c1);
+            float v10 = sample(r1, c0);
+            float v11 = sample(r1, c1);
+
+            float top = v00 + tc * (v01 - v00);
+            float bottom = v10 + tc * (v11 - v10);
+            return top + tr * (bottom - top);
+        };
+
+        auto warp_affine = [&](const Eigen::MatrixXf& source)
+        {
+            Eigen::MatrixXf warped = Eigen::MatrixXf::Zero(image_size, image_size);
+            Eigen::Matrix2f A;
+            A << 1.0f + du_dx, du_dy,
+                 dv_dx, 1.0f + dv_dy;
+            Eigen::Matrix2f invA = A.inverse();
+            Eigen::Vector2f translation(u0, v0);
+
+            for(int row = 0; row < image_size; row++)
+            {
+                for(int col = 0; col < image_size; col++)
+                {
+                    Eigen::Vector2f y(static_cast<float>(col), static_cast<float>(row));
+                    Eigen::Vector2f x = image_center + invA * (y - image_center - translation);
+                    warped(row, col) = sample_bilinear(source, x.y(), x.x());
+                }
+            }
+
+            return warped;
+        };
+
+        Eigen::MatrixXf ref = render_reference();
+        Eigen::MatrixXf flow = warp_affine(ref);
+
+        Correlator baseline(kTestWindowSize, kTestOverlap);
+        VectorField baseline_field = baseline.Compute(ref, flow);
+
+        CorrelatorParameters pid_parameters;
+        pid_parameters.window_size = kTestWindowSize;
+        pid_parameters.overlap = kTestOverlap;
+        pid_parameters.enable_pid = true;
+        pid_parameters.pid_iterations = 2;
+        pid_parameters.pid_relaxation = 1.0f;
+        pid_parameters.pid_smoothing_passes = 1;
+
+        Correlator pid(pid_parameters);
+        VectorField pid_field = pid.Compute(ref, flow);
+
+        float baseline_rmse = ComputeFieldRmse(baseline_field, kTestWindowSize, kTestOverlap, displacement);
+        float pid_rmse = ComputeFieldRmse(pid_field, kTestWindowSize, kTestOverlap, displacement);
+
+        PrintSection("PID Affine Deformation");
+        PrintLine("baseline RMSE", FormatFloat(baseline_rmse) + " px");
+        PrintLine("pid RMSE", FormatFloat(pid_rmse) + " px");
+
+        CHECK(pid_rmse < baseline_rmse);
+        CHECK(pid_rmse <= baseline_rmse * 0.95f);
     }
 
 }

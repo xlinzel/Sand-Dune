@@ -207,6 +207,16 @@ void UI::DrawParametersPanel()
         session.correlatorparameters.overlap,
         0,
         session.correlatorparameters.window_size - 1);
+    ImGui::Checkbox("Window Deformation (PID)", &session.correlatorparameters.enable_pid);
+    if(session.correlatorparameters.enable_pid)
+    {
+        ImGui::SliderInt("PID Iterations", &session.correlatorparameters.pid_iterations, 1, 4);
+        ImGui::SliderFloat("PID Relaxation", &session.correlatorparameters.pid_relaxation, 0.1f, 1.0f, "%.2f");
+        ImGui::SliderInt("PID Smooth Passes", &session.correlatorparameters.pid_smoothing_passes, 0, 3);
+    }
+    session.correlatorparameters.pid_iterations = std::max(0, session.correlatorparameters.pid_iterations);
+    session.correlatorparameters.pid_relaxation = std::clamp(session.correlatorparameters.pid_relaxation, 0.1f, 1.0f);
+    session.correlatorparameters.pid_smoothing_passes = std::max(0, session.correlatorparameters.pid_smoothing_passes);
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Experimental Parameters");
@@ -339,8 +349,6 @@ void UI::DrawCalculationsPanel()
 void UI::DrawPipelinePanel()
 {
     ImGui::Begin("Pipeline");
-
-    
 
     //----------------------------
     //Full Pipeline
