@@ -382,26 +382,27 @@ void Session::ApplyRefractionCorrection()
 void Session::ScaleFields()
 {
     // Clamp parameters to physically valid minimums to prevent division by zero
-    opticalparameters.t    = std::max(opticalparameters.t,    0.001f);
-    opticalparameters.P_px = std::max(opticalparameters.P_px, 0.001f);
-    opticalparameters.Z_d  = std::max(opticalparameters.Z_d,  0.001f);
-    opticalparameters.Z_a  = std::max(opticalparameters.Z_a,  0.001f);
-    opticalparameters.f    = std::max(opticalparameters.f,    0.001f);
+    float   t    = std::max(opticalparameters.t,    0.001f);
+    float   P_px = std::max(opticalparameters.P_px, 0.001f);
+    float   Z_d  = std::max(opticalparameters.Z_d,  0.001f);
+    float   Z_a  = std::max(opticalparameters.Z_a,  0.001f);
+    float   f    = std::max(opticalparameters.f,    0.001f);
+    float   n    = std::max(opticalparameters.n,    0.001f);
 
-    // Convert pixel displacement -> dn/d(grid index), fully scaled
-    // Reconstruction only needs to integrate - no further scaling required
-    float Z_B   = opticalparameters.Z_d + opticalparameters.Z_a;
-    float z_i   = opticalparameters.f * Z_B / (Z_B - opticalparameters.f);
+    // Convert pixel displacement -> dn/dx, fully scaled
+    float Z_B   = Z_d + Z_a;
+    float z_i   = f * Z_B / (Z_B - f);
 
     float term = b_ref
-                    ? opticalparameters.t                   // RI mode: divide by thickness
-                    : (opticalparameters.n - 1.0f);         // thickness mode: divide by (n-1)
+                    ? t                   // RI mode: divide by thickness
+                    : (n - 1.0f);         // thickness mode: divide by (n-1)
     term = std::max(term, 0.001f);
 
     int step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
-    float scale = (float)step * opticalparameters.P_px * 1e-3
-            * (Z_B - opticalparameters.f)
-            / (opticalparameters.f * opticalparameters.Z_d * term);
+    float scale =   P_px * 1e-3 * (Z_B - f) * n
+                    / (f * Z_d * term);
+
+    float surf_fac = (float)step * P_px * 1e-3 * Z_a / z_i;
 
     if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
     {
@@ -433,7 +434,7 @@ void Session::ScaleFields()
     {
         surface.resize(raw_surface.size());
         for(int i = 0; i < (int)raw_surface.size(); i++)
-            surface[i] = raw_surface[i].array() * scale;
+            surface[i] = raw_surface[i].array() * scale * surf_fac;
     }
 }
 

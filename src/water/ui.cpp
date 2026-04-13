@@ -678,7 +678,7 @@ void UI::DrawCorrelation()
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
                 const char* unit = (correlation_map == 2) ? ""
-                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/grid" : " mm/grid";
+                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
                 ImGui::SetTooltip("%.4f%s", (*maps[correlation_map])(row, col), unit);
             }
         }
@@ -840,7 +840,7 @@ void UI::DrawVal()
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
                 const char* unit = (val_map == 2) ? ""
-                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/grid" : " mm/grid";
+                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
                 ImGui::SetTooltip("%.4f%s", (*maps[val_map])(row, col), unit);
             }
         }
