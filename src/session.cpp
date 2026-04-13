@@ -1,11 +1,33 @@
 #include <session.h>
 #include <algorithm>
 
+namespace
+{
+float EstimateEtaSeconds(const std::chrono::steady_clock::time_point& start, float progress)
+{
+    progress = std::clamp(progress, 0.0f, 1.0f);
+    if(progress <= 0.0005f || progress >= 1.0f)
+        return -1.0f;
+
+    float elapsed = std::chrono::duration<float>(
+        std::chrono::steady_clock::now() - start).count();
+
+    return elapsed / progress * (1.0f - progress);
+}
+}
+
 Session::Session()
 {
     stagestates[STAGE_CORRELATION].store(Idle);
     stagestates[STAGE_VAL].store(Idle);
     stagestates[STAGE_RECON].store(Idle);
+    for(int i = 0; i < STAGE_TOTAL; i++)
+    {
+        stage_progress[i].store(0.0f);
+        stage_start[i] = std::chrono::steady_clock::now();
+    }
+    task_start = std::chrono::steady_clock::now();
+    full_task_start = task_start;
 }
 
 Session::~Session()
@@ -123,8 +145,14 @@ void Session::RunReconstruction()
     raw_surface.resize(raw_val_field.size());
     surface.resize(raw_val_field.size());
 
+    Eigen::MatrixXf recon_mask;
+    if(mask_apply && mask.GetSet())
+        recon_mask = mask.GetMask();
+    else if(!raw_val_field.empty())
+        recon_mask = Eigen::MatrixXf::Ones(raw_val_field[0].height, raw_val_field[0].width);
+
     for(int i = 0; i < (int)raw_val_field.size(); i++)
-        raw_surface[i] = recon.Compute(raw_val_field[i]);
+        raw_surface[i] = recon.Compute(raw_val_field[i], recon_mask);
 
     ScaleFields();
 
@@ -148,6 +176,10 @@ void Session::RunCorrelationAsync()
 
     progress = 0.0f;
     task_start = std::chrono::steady_clock::now();
+    stage_progress[STAGE_CORRELATION] = 0.0f;
+    stage_start[STAGE_CORRELATION] = task_start;
+    full_progress = 0.0f;
+    full_pipeline_running = false;
 
     activetask = std::async(std::launch::async, [this]()
     {
@@ -158,7 +190,12 @@ void Session::RunCorrelationAsync()
         for(int i = 0; i < n; i++)
         {
             raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat(),
-                [this, i, n](float p){ progress = (i + p) / n; });
+                [this, i, n](float p)
+                {
+                    float stage_p = (i + p) / n;
+                    progress = stage_p;
+                    stage_progress[STAGE_CORRELATION] = stage_p;
+                });
         }
 
         if(stop_requested) return;
@@ -166,6 +203,8 @@ void Session::RunCorrelationAsync()
         ApplyRefractionCorrection();
         ScaleFields();
 
+        progress = 1.0f;
+        stage_progress[STAGE_CORRELATION] = 1.0f;
         stagestates[STAGE_CORRELATION] = Done;
         stagestates[STAGE_VAL] = Ready;
     });
@@ -181,6 +220,10 @@ void Session::RunValidationAsync()
 
     progress = 0.0f;
     task_start = std::chrono::steady_clock::now();
+    stage_progress[STAGE_VAL] = 0.0f;
+    stage_start[STAGE_VAL] = task_start;
+    full_progress = 0.0f;
+    full_pipeline_running = false;
 
     activetask = std::async(std::launch::async, [this]()
     {
@@ -190,11 +233,15 @@ void Session::RunValidationAsync()
         for(int i = 0; i < (int)raw_correlation_field.size(); i++)
         {
             raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
-            progress = (float)(i + 1) / raw_correlation_field.size();
+            float stage_p = (float)(i + 1) / raw_correlation_field.size();
+            progress = stage_p;
+            stage_progress[STAGE_VAL] = stage_p;
         }
 
         ScaleFields();
 
+        progress = 1.0f;
+        stage_progress[STAGE_VAL] = 1.0f;
         stagestates[STAGE_VAL] = Done;
         stagestates[STAGE_RECON] = Ready;
     });
@@ -208,6 +255,12 @@ void Session::RunReconstructionAsync()
         return;
 
     stagestates[STAGE_RECON] = Busy;
+    progress = 0.0f;
+    task_start = std::chrono::steady_clock::now();
+    stage_progress[STAGE_RECON] = 0.0f;
+    stage_start[STAGE_RECON] = task_start;
+    full_progress = 0.0f;
+    full_pipeline_running = false;
 
     activetask = std::async(std::launch::async, [this]()
     {
@@ -221,24 +274,25 @@ void Session::RunReconstructionAsync()
         Reconstruction recon;
         int n = (int)raw_val_field.size();
         raw_surface.resize(n);
+        Eigen::MatrixXf recon_mask;
+        if(mask_apply && mask.GetSet())
+            recon_mask = mask.GetMask();
+        else if(n > 0)
+            recon_mask = Eigen::MatrixXf::Ones(raw_val_field[0].height, raw_val_field[0].width);
 
         for(int i = 0; i < n; i++)
         {
-            if(mask_apply)
-            {
-                VectorField temp = raw_val_field[i];
-                temp.u = mask.ApplyMask(temp.u);
-                temp.v = mask.ApplyMask(temp.v);
-                raw_surface[i] = recon.Compute(temp);
-            }
-            else
-                raw_surface[i] = recon.Compute(raw_val_field[i]);
+            raw_surface[i] = recon.Compute(raw_val_field[i], recon_mask);
 
-            progress = (float)(i + 1) / n;
+            float stage_p = (float)(i + 1) / n;
+            progress = stage_p;
+            stage_progress[STAGE_RECON] = stage_p;
         }
 
         ScaleFields();
 
+        progress = 1.0f;
+        stage_progress[STAGE_RECON] = 1.0f;
         stagestates[STAGE_RECON] = Done;
     });
 }
@@ -254,6 +308,13 @@ void Session::RunAllAsync()
 
     progress = 0.0f;
     task_start = std::chrono::steady_clock::now();
+    stage_progress[STAGE_CORRELATION] = 0.0f;
+    stage_progress[STAGE_VAL] = 0.0f;
+    stage_progress[STAGE_RECON] = 0.0f;
+    stage_start[STAGE_CORRELATION] = task_start;
+    full_progress = 0.0f;
+    full_task_start = task_start;
+    full_pipeline_running = true;
 
     activetask = std::async(std::launch::async, [this]()
     {
@@ -266,14 +327,30 @@ void Session::RunAllAsync()
         for(int i = 0; i < n && !stop_requested; i++)
         {
             raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat(),
-                [this, i, n](float p){ progress = (i + p) / n; });
+                [this, i, n](float p)
+                {
+                    float stage_p = (i + p) / n;
+                    progress = stage_p;
+                    stage_progress[STAGE_CORRELATION] = stage_p;
+                    full_progress = stage_p / 3.0f;
+                });
         }
 
-        if(stop_requested) return;
+        if(stop_requested)
+        {
+            full_pipeline_running = false;
+            return;
+        }
         ApplyRefractionCorrection();
         ScaleFields();
+        stage_progress[STAGE_CORRELATION] = 1.0f;
+        full_progress = 1.0f / 3.0f;
         stagestates[STAGE_CORRELATION] = Done;
         stagestates[STAGE_VAL] = Busy;
+        task_start = std::chrono::steady_clock::now();
+        stage_start[STAGE_VAL] = task_start;
+        progress = 0.0f;
+        stage_progress[STAGE_VAL] = 0.0f;
 
         // --- Validation ---
         Validation post;
@@ -281,11 +358,20 @@ void Session::RunAllAsync()
         for(int i = 0; i < n && !stop_requested; i++)
         {
             raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
-            progress = (float)(i + 1) / n;
+            float stage_p = (float)(i + 1) / n;
+            progress = stage_p;
+            stage_progress[STAGE_VAL] = stage_p;
+            full_progress = (1.0f + stage_p) / 3.0f;
         }
 
-        if(stop_requested) return;
+        if(stop_requested)
+        {
+            full_pipeline_running = false;
+            return;
+        }
         ScaleFields();
+        stage_progress[STAGE_VAL] = 1.0f;
+        full_progress = 2.0f / 3.0f;
         stagestates[STAGE_VAL] = Done;
         stagestates[STAGE_RECON] = Busy;
 
@@ -297,28 +383,46 @@ void Session::RunAllAsync()
                 {posx / step, posy / step}, radius / step);
         }
 
-        if(stop_requested) return;
+        if(stop_requested)
+        {
+            full_pipeline_running = false;
+            return;
+        }
 
         Reconstruction recon;
         raw_surface.resize(n);
+        Eigen::MatrixXf recon_mask;
+        if(mask_apply && mask.GetSet())
+            recon_mask = mask.GetMask();
+        else if(n > 0)
+            recon_mask = Eigen::MatrixXf::Ones(raw_val_field[0].height, raw_val_field[0].width);
+
+        task_start = std::chrono::steady_clock::now();
+        stage_start[STAGE_RECON] = task_start;
+        progress = 0.0f;
+        stage_progress[STAGE_RECON] = 0.0f;
+
         for(int i = 0; i < n && !stop_requested; i++)
         {
-            if(mask_apply)
-            {
-                VectorField temp = raw_val_field[i];
-                temp.u = mask.ApplyMask(temp.u);
-                temp.v = mask.ApplyMask(temp.v);
-                raw_surface[i] = recon.Compute(temp);
-            }
-            else
-                raw_surface[i] = recon.Compute(raw_val_field[i]);
+            raw_surface[i] = recon.Compute(raw_correlation_field[i], recon_mask);
 
-            progress = (float)(i + 1) / n;
+            float stage_p = (float)(i + 1) / n;
+            progress = stage_p;
+            stage_progress[STAGE_RECON] = stage_p;
+            full_progress = (2.0f + stage_p) / 3.0f;
         }
 
-        if(stop_requested) return;
+        if(stop_requested)
+        {
+            full_pipeline_running = false;
+            return;
+        }
         ScaleFields();
 
+        progress = 1.0f;
+        stage_progress[STAGE_RECON] = 1.0f;
+        full_progress = 1.0f;
+        full_pipeline_running = false;
         stagestates[STAGE_RECON] = Done;
     });
 }
@@ -589,6 +693,37 @@ const VectorField& Session::GetRawValField() const
 const Eigen::MatrixXf& Session::GetSurface() const
 {
     return surface[active_index];
+}
+
+float Session::GetStageProgress(Stages s) const
+{
+    return std::clamp(stage_progress[s].load(), 0.0f, 1.0f);
+}
+
+float Session::GetStageEtaSeconds(Stages s) const
+{
+    if(GetStageState(s) != Busy)
+        return -1.0f;
+
+    return EstimateEtaSeconds(stage_start[s], GetStageProgress(s));
+}
+
+float Session::GetFullProgress() const
+{
+    return std::clamp(full_progress.load(), 0.0f, 1.0f);
+}
+
+float Session::GetFullEtaSeconds() const
+{
+    if(!full_pipeline_running.load())
+        return -1.0f;
+
+    return EstimateEtaSeconds(full_task_start, GetFullProgress());
+}
+
+bool Session::IsRunningFullPipeline() const
+{
+    return full_pipeline_running.load();
 }
 
 StageState Session::GetStageState(Stages s) const

@@ -46,7 +46,7 @@ enum Stages
 /// shared between the UI and the compute back-end.
 ///
 /// The pipeline produces corrected displacement-gradient maps that are integrated
-/// by Frankot-Chellappa reconstruction into either a refractive-index variation
+/// by Frankot-Chellappa or a least squares Poisson reconstruction into either a refractive-index variation
 /// map or a thickness-variation map, depending on @p b_ref.
 class Session
 {
@@ -157,6 +157,21 @@ public:
     /// @brief Query the current state of a pipeline stage.
     StageState GetStageState(Stages s) const;
 
+    /// @brief Progress of one stage in [0, 1].
+    float GetStageProgress(Stages s) const;
+
+    /// @brief Remaining ETA in seconds for one stage, or -1 when unavailable.
+    float GetStageEtaSeconds(Stages s) const;
+
+    /// @brief Progress of the full pipeline in [0, 1] during RunAllAsync().
+    float GetFullProgress() const;
+
+    /// @brief Remaining ETA in seconds for the full pipeline, or -1 when unavailable.
+    float GetFullEtaSeconds() const;
+
+    /// @brief True while the combined RunAllAsync() pipeline is active.
+    bool IsRunningFullPipeline() const;
+
     ///@}
 
     // -------------------------------------------------------------------------
@@ -165,7 +180,7 @@ public:
     ///@{
     int   posx = 0,    posy = 0; ///< Mask centre in field coordinates (col, row).
     int   radius = 1000;         ///< Mask radius in field units.
-    float a = 0.1f;              ///< Tukey roll-off parameter [0, 1].
+    float a = 0.2f;              ///< Tukey roll-off parameter [0, 1].
     bool  mask_apply = true;     ///< Apply the mask to reconstruction outputs when true.
     ///@}
 
@@ -178,6 +193,11 @@ public:
     ///@{
     std::atomic<float> progress{0.0f};               ///< Pipeline progress in [0, 1], updated during async runs.
     std::chrono::steady_clock::time_point task_start; ///< Wall-clock time when the current async task began.
+    std::atomic<float> stage_progress[STAGE_TOTAL];   ///< Per-stage progress in [0, 1].
+    std::chrono::steady_clock::time_point stage_start[STAGE_TOTAL]; ///< Per-stage start times.
+    std::atomic<float> full_progress{0.0f};          ///< Full-pipeline progress in [0, 1] during RunAllAsync().
+    std::chrono::steady_clock::time_point full_task_start; ///< Start time for the current full-pipeline run.
+    std::atomic<bool> full_pipeline_running{false};  ///< True while RunAllAsync() is executing.
     ///@}
 
     // -------------------------------------------------------------------------

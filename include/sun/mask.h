@@ -29,7 +29,7 @@ public:
     /// @param h      Field height (rows).
     /// @param center Mask centre in field coordinates (col, row).
     /// @param radius Mask radius in field units.
-    /// @param a      Roll-off fraction in [0, 1].  0 = rectangular, 1 = full Hann window.
+    /// @param a      Roll-off fraction in [0, 1].  0 = hard cutoff, 1 = full Hann window.
     void GenTukCircleMask(const int w, const int h, const Eigen::Vector2f center, const float radius, const float a);
 
     /// @brief Multiply @p data element-wise by the mask and return the result.

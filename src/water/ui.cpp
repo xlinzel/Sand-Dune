@@ -348,6 +348,17 @@ void UI::DrawPipelinePanel()
 {
     ImGui::Begin("Pipeline");
 
+    auto DrawEta = [](float time_s)
+    {
+        if(time_s < 0.0f)
+            return;
+
+        int hrs = (int)time_s / 3600;
+        int mins = ((int)time_s % 3600) / 60;
+        int s = (int)time_s % 60;
+        ImGui::Text("ETA: %d:%02d:%02d", hrs, mins, s);
+    };
+
     //----------------------------
     //Full Pipeline
     //----------------------------
@@ -356,18 +367,25 @@ void UI::DrawPipelinePanel()
     
     ImGui::Text("Status: ");
     ImGui::SameLine();
-    switch (session.GetStageState(STAGE_CORRELATION))
+    if(session.IsRunningFullPipeline())
     {
-        case Idle:
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "[Idle]"); break;
-        case Ready:
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1), "[Ready]"); break;
-        case Busy:
-            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.1f, 1), "[Busy]"); break;
-        case Done:
-            ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1), "[Done]"); break;
-        case Dirty:
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.1f, 1), "[Busy]");
+    }
+    else
+    {
+        switch (session.GetStageState(STAGE_CORRELATION))
+        {
+            case Idle:
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "[Idle]"); break;
+            case Ready:
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1), "[Ready]"); break;
+            case Busy:
+                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.1f, 1), "[Busy]"); break;
+            case Done:
+                ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1), "[Done]"); break;
+            case Dirty:
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.1f, 1), "[Dirty]"); break;
+        }
     }
 
     bool was_disabled = (session.GetStageState(STAGE_CORRELATION) != Ready && session.GetStageState(STAGE_CORRELATION) != Done && session.GetStageState(STAGE_CORRELATION) != Dirty) || session.IsRunning();
@@ -382,23 +400,11 @@ void UI::DrawPipelinePanel()
     if(was_disabled)
         ImGui::EndDisabled();
 
-    if(session.GetStageState(STAGE_CORRELATION) == Busy)
+    if(session.IsRunningFullPipeline())
     {
-        float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
+        float p = session.GetFullProgress();
         ImGui::ProgressBar(p, ImVec2(-1, 0));
-        if(p > 0.0005f)
-        {
-            float elapsed = std::chrono::duration<float>(
-                std::chrono::steady_clock::now() - session.task_start).count();
-
-            float time_s = elapsed / p * (1.0f - p);
-
-            int hrs = time_s / 3600;
-            int mins = ((int)time_s % 3600) / 60;
-            int s = (int)time_s % 60;
-
-            ImGui::Text("ETA: %d:%02d:%02d", hrs, mins, s);
-        }
+        DrawEta(session.GetFullEtaSeconds());
     }
 
     //----------------------------
@@ -436,21 +442,9 @@ void UI::DrawPipelinePanel()
 
     if(session.GetStageState(STAGE_CORRELATION) == Busy)
     {
-        float p = std::clamp(session.progress.load(), 0.0f, 1.0f);
+        float p = session.GetStageProgress(STAGE_CORRELATION);
         ImGui::ProgressBar(p, ImVec2(-1, 0));
-        if(p > 0.02f)
-        {
-            float elapsed = std::chrono::duration<float>(
-                std::chrono::steady_clock::now() - session.task_start).count();
-
-            float time_s = elapsed / p * (1.0f - p);
-
-            int hrs = time_s / 3600;
-            int mins = ((int)time_s % 3600) / 60;
-            int s = (int)time_s % 60;
-
-            ImGui::Text("ETA: %d:%02d:%02d", hrs, mins, s);
-        }
+        DrawEta(session.GetStageEtaSeconds(STAGE_CORRELATION));
     }
 
     //----------------------------
@@ -486,6 +480,13 @@ void UI::DrawPipelinePanel()
     if(was_disabled)
         ImGui::EndDisabled();
 
+    if(session.GetStageState(STAGE_VAL) == Busy)
+    {
+        float p = session.GetStageProgress(STAGE_VAL);
+        ImGui::ProgressBar(p, ImVec2(-1, 0));
+        DrawEta(session.GetStageEtaSeconds(STAGE_VAL));
+    }
+
     //----------------------------
     //Reconstruction
     //----------------------------
@@ -518,6 +519,13 @@ void UI::DrawPipelinePanel()
     
     if(was_disabled)
         ImGui::EndDisabled();
+
+    if(session.GetStageState(STAGE_RECON) == Busy)
+    {
+        float p = session.GetStageProgress(STAGE_RECON);
+        ImGui::ProgressBar(p, ImVec2(-1, 0));
+        DrawEta(session.GetStageEtaSeconds(STAGE_RECON));
+    }
     
     ImGui::End();
 }
