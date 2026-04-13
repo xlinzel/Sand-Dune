@@ -83,6 +83,8 @@ const VectorField Validation::PostProcess(const VectorField& data) const
                 continue;
             }
 
+            //May be suppressing true gradients: REMOVE FOR NOW
+            /*
             //Residuals calculations
             for(int k = 0; k < n; k++)
             {
@@ -116,6 +118,7 @@ const VectorField Validation::PostProcess(const VectorField& data) const
                 processed.u(i, j) = u_med;
                 processed.v(i, j) = v_med;
             }
+            */
         }
     }
 
