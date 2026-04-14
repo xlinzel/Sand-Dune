@@ -20,10 +20,9 @@ public:
     void DrawParametersPanel();
     void DrawCalculationsPanel();
     void DrawPipelinePanel();
-    void DrawCalcualtionsPanel();
     void DrawVisualizationPanel();
 
-    void DrawPIV();
+    void DrawCorrelation();
     void DrawVal();
     void DrawSurf();
 
@@ -41,7 +40,7 @@ public:
     static void OnSaveDirSelected(void* userdata, const char* const* filelist, int filter);
 
 private:
-    void RebuildPIVTextures();
+    void RebuildCorrelationTextures();
     void RebuildValTextures();
     void RebuildSurfTexture();
 
@@ -51,18 +50,19 @@ private:
     //Original Images
     SDL_Texture* ref_tex = nullptr;
     SDL_Texture* flow_tex = nullptr;
-    SDL_Texture* surface_tex = nullptr;
 
     //Generated Images and tracking
-    std::vector<SDL_Texture*> piv_textures = {nullptr, nullptr, nullptr};
-    int   piv_map  = 0;                          // 0=u, 1=v, 2=s2n
-    float piv_cmap_min[3] = {-2.0f, -2.0f, 0.0f};
-    float piv_cmap_max[3] = { 2.0f,  2.0f,  2.0f};
+    std::vector<SDL_Texture*> correlation_textures = {nullptr, nullptr, nullptr};
+    int   correlation_map  = 0;                          // 0=u, 1=v, 2=s2n
+    float correlation_cmap_min[3] = {-2.0f, -2.0f, 0.0f};
+    float correlation_cmap_max[3] = { 2.0f,  2.0f,  2.0f};
     
     std::vector<SDL_Texture*> val_textures = {nullptr, nullptr, nullptr};
     int   val_map  = 0;                          // 0=u, 1=v, 2=s2n
     float val_cmap_min[3] = {-2.0f, -2.0f, 0.0f};
     float val_cmap_max[3] = { 2.0f,  2.0f,  2.0f};
+
+    bool show_raw_displacements = false; ///< Display correlation/validation u,v maps in pixel units.
     
     SDL_Texture* surf_texture = nullptr;
     float surf_cmap_min = -0.1f;
@@ -76,6 +76,5 @@ private:
     bool save_dir_dialog_open = false;
 
     //Background image rendering
-    SDL_Surface* surf = nullptr;
     SDL_Texture* texture_bg = nullptr;
 };

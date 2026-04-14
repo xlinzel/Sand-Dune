@@ -1,28 +1,34 @@
 #include <grains/reconstruction.h>
 #include <numbers>
+#include <Eigen/Sparse>
+#include <Eigen/IterativeLinearSolvers>
+#include <vector>
 
-Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
+Eigen::MatrixXf Reconstruction::ComputeFC(const VectorField& data) const
 {
-    //Mean Subtraction (account for tilt) ------------------------------------------------------------
-    //Could remove real gradient data from large refractive index migration in material
-    auto nonzero_u = (data.u.array() != 0.0f);
-    auto count_u = nonzero_u.count();
-    float mean_u = count_u > 0 
-        ? nonzero_u.select(data.u.array(), 0.0f).sum() / count_u 
-        : 0.0f;
+    // Mean-subtraction experiments were disabled; Reconstruction currently integrates
+    // the raw per-window displacement field exactly as it is passed in.
+    //auto nonzero_u = (data.u.array() != 0.0f);
+    //auto count_u = nonzero_u.count();
+    //float mean_u = count_u > 0 
+    //    ? nonzero_u.select(data.u.array(), 0.0f).sum() / count_u 
+    //    : 0.0f;
 
-    auto nonzero_v = (data.v.array() != 0.0f);
-    auto count_v = nonzero_v.count();
-    float mean_v = count_v > 0 
-        ? nonzero_v.select(data.v.array(), 0.0f).sum() / count_v 
-        : 0.0f;
+    //auto nonzero_v = (data.v.array() != 0.0f);
+    //auto count_v = nonzero_v.count();
+    //float mean_v = count_v > 0 
+    //    ? nonzero_v.select(data.v.array(), 0.0f).sum() / count_v 
+    //    : 0.0f;
 
-    Eigen::MatrixXf u_cent = nonzero_u.select(data.u.array() - mean_u, 0.0f);
-    Eigen::MatrixXf v_cent = nonzero_v.select(data.v.array() - mean_v, 0.0f);
+    //Eigen::MatrixXf u_cent = nonzero_u.select(data.u.array() - mean_u, 0.0f);
+    //Eigen::MatrixXf v_cent = nonzero_v.select(data.v.array() - mean_v, 0.0f);
+    
+    Eigen::MatrixXf u_cent = data.u;
+    Eigen::MatrixXf v_cent = data.v;
 
     //-----------------------------------------------
 
-    //Preprocessing
+    // Mirror the displacement field into a 2x2 tiled domain before the FFT solve.
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> dx(data.height * 2, data.width * 2);
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> dy(data.height * 2, data.width * 2);
 
@@ -58,7 +64,7 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     fftwf_execute(xplan);
     fftwf_execute(yplan);
 
-    //Frankot Chellappa Method
+    // Frankot-Chellappa frequency-domain integration.
     fftwf_complex* F_s = (fftwf_complex*) fftwf_alloc_complex(rows * freq_cols);
 
     //FFT Inverse Setup
@@ -96,7 +102,7 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     surface = fft_surf.block(0, 0, data.height, data.width);
 
     //---------------------------------------------------------------------------------------
-    //Only apply integral to points that were non zero to begin with
+    // Keep masked/empty locations at zero in the returned relative surface map.
     auto valid = (data.u.array() != 0.0f || data.v.array() != 0.0f);
     surface = valid.select(surface.array(), 0.0f);
     //---------------------------------------------------------------------------------------
@@ -115,7 +121,104 @@ Eigen::MatrixXf Reconstruction::Compute(const VectorField& data) const
     
     fftwf_destroy_plan(inv_plan);
 
-    // No scaling needed — u/v were fully converted to dn/d(grid index) in Session
+    // Physical unit conversion is applied later in Session::ScaleFields().
+
+    return surface;
+}
+
+Eigen::MatrixXf Reconstruction::Compute(const VectorField& data, const Eigen::MatrixXf& mask) const
+{
+    Eigen::MatrixXf surface = Eigen::MatrixXf::Zero(data.height, data.width);
+
+    bool has_mask = (mask.rows() == data.height && mask.cols() == data.width);
+    //Mask index getter to return validity of index wihtin data
+    auto is_valid = [&](int row, int col)
+    {
+        return !has_mask || mask(row, col) != 0.0f;
+    };
+
+    //Form indexed map, so that the solver will onyl loop through known values
+    Eigen::MatrixXi index = Eigen::MatrixXi::Constant(data.height, data.width, -1);
+    int unknowns = 0;
+    for(int row = 0; row < data.height; row++)
+        for(int col = 0; col < data.width; col++)
+            if(is_valid(row, col))
+                index(row, col) = unknowns++;
+
+    //If there are no unknown positons return surface
+    if(unknowns == 0)
+        return surface;
+
+    using Triplet = Eigen::Triplet<float>;
+    std::vector<Triplet> triplets;
+    triplets.reserve(static_cast<size_t>(unknowns) * 6);
+    Eigen::VectorXf rhs = Eigen::VectorXf::Zero(unknowns);
+
+    auto add_edge = [&](int row_a, int col_a, int row_b, int col_b, float gradient)
+    {
+        int ia = index(row_a, col_a);
+        int ib = index(row_b, col_b);
+        if(ia < 0 || ib < 0)
+            return;
+
+        triplets.emplace_back(ia, ia, 1.0f);
+        triplets.emplace_back(ib, ib, 1.0f);
+        triplets.emplace_back(ia, ib, -1.0f);
+        triplets.emplace_back(ib, ia, -1.0f);
+        rhs(ia) -= gradient;
+        rhs(ib) += gradient;
+    };
+
+    for(int row = 0; row < data.height; row++)
+    {
+        for(int col = 0; col + 1 < data.width; col++)
+        {
+            if(!is_valid(row, col) || !is_valid(row, col + 1))
+                continue;
+            float grad_x = 0.5f * (data.u(row, col) + data.u(row, col + 1));
+            add_edge(row, col, row, col + 1, grad_x);
+        }
+    }
+
+    for(int row = 0; row + 1 < data.height; row++)
+    {
+        for(int col = 0; col < data.width; col++)
+        {
+            if(!is_valid(row, col) || !is_valid(row + 1, col))
+                continue;
+            float grad_y = 0.5f * (data.v(row, col) + data.v(row + 1, col));
+            add_edge(row, col, row + 1, col, grad_y);
+        }
+    }
+
+    int gauge = -1;
+    for(int row = 0; row < data.height && gauge < 0; row++)
+        for(int col = 0; col < data.width && gauge < 0; col++)
+            if(is_valid(row, col))
+                gauge = index(row, col);
+
+    if(gauge >= 0)
+        triplets.emplace_back(gauge, gauge, 1.0f);
+
+    Eigen::SparseMatrix<float> system(unknowns, unknowns);
+    system.setFromTriplets(triplets.begin(), triplets.end());
+
+    Eigen::ConjugateGradient<Eigen::SparseMatrix<float>, Eigen::Lower | Eigen::Upper> solver;
+    solver.setMaxIterations(std::max(unknowns * 4, 200));
+    solver.setTolerance(1e-5f);
+    solver.compute(system);
+
+    if(solver.info() != Eigen::Success)
+        return surface;
+
+    Eigen::VectorXf solution = solver.solve(rhs);
+    if(solver.info() != Eigen::Success)
+        return surface;
+
+    for(int row = 0; row < data.height; row++)
+        for(int col = 0; col < data.width; col++)
+            if(is_valid(row, col))
+                surface(row, col) = solution(index(row, col));
 
     return surface;
 }

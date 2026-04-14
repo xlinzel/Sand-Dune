@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 #include <wind/vectorfield.h>
 
-/// @brief Post-processing validation and outlier replacement for PIV vector fields.
+/// @brief Post-processing validation and outlier replacement for correlation vector fields.
 ///
 /// Applies signal-to-noise and normalised-residual thresholds to flag spurious
 /// vectors, then replaces them with a local median interpolation.
@@ -13,12 +13,12 @@ public:
     Validation() {};
 
     /// @brief Validate and replace outliers in @p data.
-    /// @param data Raw PIV vector field.
+    /// @param data Raw correlation vector field.
     /// @return A new VectorField with outliers replaced by median-interpolated values.
     const VectorField PostProcess(const VectorField& data) const;
 
     /// @brief Validate and replace outliers, with an additional external binary mask.
-    /// @param data Raw PIV vector field.
+    /// @param data Raw correlation vector field.
     /// @param mask Boolean mask; false entries are treated as invalid regardless of metrics.
     /// @return A new VectorField with masked and outlier positions replaced.
     const VectorField PostProcess(const VectorField& data,
