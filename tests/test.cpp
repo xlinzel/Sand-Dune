@@ -17,6 +17,8 @@
 #include <fstream>
 #include <filesystem>
 
+//NOTE: Many tests were written by AI, but then reviewed to ensure correctness
+
 namespace
 {
 constexpr int kTestWindowSize = 32;
@@ -234,6 +236,14 @@ TEST_CASE("Correlator Computation")
         Correlator correlator(kTestWindowSize, kTestOverlap);
         VectorField result = correlator.Compute(img, img);
 
+        auto zero_disp = [](float, float) { return Eigen::Vector2f(0.0f, 0.0f); };
+        float rmse = ComputeFieldRmse(result, kTestWindowSize, kTestOverlap, zero_disp);
+        float max_abs = std::max(result.u.cwiseAbs().maxCoeff(), result.v.cwiseAbs().maxCoeff());
+
+        PrintSection("Zero Displacement");
+        PrintLine("RMSE", FormatFloat(rmse) + " px");
+        PrintLine("max |displacement|", FormatFloat(max_abs) + " px");
+
         CHECK(result.u.cwiseAbs().maxCoeff() < 0.15f);
         CHECK(result.v.cwiseAbs().maxCoeff() < 0.15f);
         CHECK(std::abs(result.u.mean()) < 0.05f);
@@ -317,12 +327,19 @@ TEST_CASE("Correlator Computation")
             { 0.42f, -0.18f}
         };
 
+        PrintSection("Subpixel Displacement");
         for(const Eigen::Vector2f& shift : shifts)
         {
             Eigen::MatrixXf flow = render(shift.x(), shift.y());
 
             Correlator correlator(kTestWindowSize, kTestOverlap);
             VectorField result = correlator.Compute(ref, flow);
+
+            auto expected_disp = [&](float, float) { return Eigen::Vector2f(shift.x(), shift.y()); };
+            float rmse = ComputeFieldRmse(result, kTestWindowSize, kTestOverlap, expected_disp);
+
+            std::string label = "shift (" + FormatFloat(shift.x(), 2) + ", " + FormatFloat(shift.y(), 2) + ")";
+            PrintLine(label, FormatFloat(rmse) + " px RMSE");
 
             CHECK(std::abs(result.u.mean() - shift.x()) < 0.08f);
             CHECK(std::abs(result.v.mean() - shift.y()) < 0.08f);
@@ -331,9 +348,12 @@ TEST_CASE("Correlator Computation")
 
     SUBCASE("PID Affine Deformation")
     {
-        constexpr int image_size = 192;
-        constexpr int spot_count = 160;
-        constexpr float sigma = 1.1f;
+        // image_size=256, spot_count=500, sigma=1.8 give ~14 spots per 32px window
+        // and better sub-pixel peak quality, so the RMSE reflects deformation
+        // correction accuracy rather than per-window SNR noise.
+        constexpr int image_size = 256;
+        constexpr int spot_count = 500;
+        constexpr float sigma = 1.8f;
 
         std::mt19937 rng(2468);
         std::uniform_real_distribution<float> dist(14.0f, image_size - 14.0f);
@@ -454,18 +474,25 @@ TEST_CASE("Correlator Computation")
         pid_parameters.pid_relaxation = 1.0f;
         pid_parameters.pid_smoothing_passes = 1;
 
-        Correlator pid(pid_parameters);
-        VectorField pid_field = pid.Compute(ref, flow);
+        Correlator pid2(pid_parameters);
+        VectorField pid2_field = pid2.Compute(ref, flow);
+
+        CorrelatorParameters pid3_parameters = pid_parameters;
+        pid3_parameters.pid_iterations = 3;
+        Correlator pid3(pid3_parameters);
+        VectorField pid3_field = pid3.Compute(ref, flow);
 
         float baseline_rmse = ComputeFieldRmse(baseline_field, kTestWindowSize, kTestOverlap, displacement);
-        float pid_rmse = ComputeFieldRmse(pid_field, kTestWindowSize, kTestOverlap, displacement);
+        float pid2_rmse = ComputeFieldRmse(pid2_field, kTestWindowSize, kTestOverlap, displacement);
+        float pid3_rmse = ComputeFieldRmse(pid3_field, kTestWindowSize, kTestOverlap, displacement);
 
         PrintSection("PID Affine Deformation");
         PrintLine("baseline RMSE", FormatFloat(baseline_rmse) + " px");
-        PrintLine("pid RMSE", FormatFloat(pid_rmse) + " px");
+        PrintLine("pid RMSE (2 iterations)", FormatFloat(pid2_rmse) + " px");
+        PrintLine("pid RMSE (3 iterations)", FormatFloat(pid3_rmse) + " px");
 
-        CHECK(pid_rmse < baseline_rmse);
-        CHECK(pid_rmse <= baseline_rmse * 0.95f);
+        CHECK(pid2_rmse < baseline_rmse);
+        CHECK(pid2_rmse <= baseline_rmse * 0.95f);
     }
 
 }

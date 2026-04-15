@@ -73,6 +73,7 @@ bool IsPeakTooCloseToEdge(const Eigen::MatrixXf& ccmap, int row, int col)
 }
 
 /// @brief Cubic convolution weight used by CMM bicubic interpolation.
+/// Uses the Keys cubic convolution kernel
 float CubicWeight(float x)
 {
     x = std::abs(x);
@@ -591,6 +592,7 @@ Correlator::PeakResult Correlator::FindPeak(const Eigen::MatrixXf& ccmap)
                     true,
                     best_cell.du - static_cast<float>(du_offset),
                     best_cell.dv - static_cast<float>(dv_offset));
+                    
                 if(BetterCell(candidate, handoff_best))
                 {
                     handoff_best = candidate;

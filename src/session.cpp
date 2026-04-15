@@ -134,25 +134,16 @@ void Session::RunReconstruction()
 
     stagestates[STAGE_RECON] = Busy;
 
-    if(mask_apply && !raw_val_field.empty())
-    {
-        float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
-        mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
-            {posx / step, posy / step}, radius / step);
-    }
-
     Reconstruction recon;
     raw_surface.resize(raw_val_field.size());
     surface.resize(raw_val_field.size());
 
-    Eigen::MatrixXf recon_mask;
-    if(mask_apply && mask.GetSet())
-        recon_mask = mask.GetMask();
-    else if(!raw_val_field.empty())
-        recon_mask = Eigen::MatrixXf::Ones(raw_val_field[0].height, raw_val_field[0].width);
+    Eigen::MatrixXf recon_mask = raw_val_field.empty()
+                               ? Eigen::MatrixXf()
+                               : GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height);
 
     for(int i = 0; i < (int)raw_val_field.size(); i++)
-        raw_surface[i] = recon.Compute(raw_val_field[i], recon_mask);
+        raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
 
     ScaleFields();
 
@@ -264,25 +255,16 @@ void Session::RunReconstructionAsync()
 
     activetask = std::async(std::launch::async, [this]()
     {
-        if(mask_apply)
-        {
-            float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
-            mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
-                {posx / step, posy / step}, radius / step);
-        }
-
         Reconstruction recon;
         int n = (int)raw_val_field.size();
         raw_surface.resize(n);
-        Eigen::MatrixXf recon_mask;
-        if(mask_apply && mask.GetSet())
-            recon_mask = mask.GetMask();
-        else if(n > 0)
-            recon_mask = Eigen::MatrixXf::Ones(raw_val_field[0].height, raw_val_field[0].width);
+        Eigen::MatrixXf recon_mask = (n > 0)
+                                   ? GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height)
+                                   : Eigen::MatrixXf();
 
         for(int i = 0; i < n; i++)
         {
-            raw_surface[i] = recon.Compute(raw_val_field[i], recon_mask);
+            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
 
             float stage_p = (float)(i + 1) / n;
             progress = stage_p;
@@ -376,13 +358,6 @@ void Session::RunAllAsync()
         stagestates[STAGE_RECON] = Busy;
 
         // --- Reconstruction ---
-        if(mask_apply)
-        {
-            float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
-            mask.GenBinCircleMask(raw_val_field[0].width, raw_val_field[0].height,
-                {posx / step, posy / step}, radius / step);
-        }
-
         if(stop_requested)
         {
             full_pipeline_running = false;
@@ -391,11 +366,9 @@ void Session::RunAllAsync()
 
         Reconstruction recon;
         raw_surface.resize(n);
-        Eigen::MatrixXf recon_mask;
-        if(mask_apply && mask.GetSet())
-            recon_mask = mask.GetMask();
-        else if(n > 0)
-            recon_mask = Eigen::MatrixXf::Ones(raw_val_field[0].height, raw_val_field[0].width);
+        Eigen::MatrixXf recon_mask = (n > 0)
+                                   ? GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height)
+                                   : Eigen::MatrixXf();
 
         task_start = std::chrono::steady_clock::now();
         stage_start[STAGE_RECON] = task_start;
@@ -404,7 +377,7 @@ void Session::RunAllAsync()
 
         for(int i = 0; i < n && !stop_requested; i++)
         {
-            raw_surface[i] = recon.Compute(raw_correlation_field[i], recon_mask);
+            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
 
             float stage_p = (float)(i + 1) / n;
             progress = stage_p;
@@ -483,9 +456,46 @@ void Session::ApplyRefractionCorrection()
     }
 }
 
+Eigen::MatrixXf Session::GetReconstructionMask(int width, int height)
+{
+    if(mask_apply)
+    {
+        float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
+        mask.GenBinCircleMask(width, height, {posx / step, posy / step}, radius / step);
+    }
+
+    if(mask_apply && mask.GetSet())
+        return mask.GetMask();
+
+    return Eigen::MatrixXf::Ones(height, width);
+}
+
+Eigen::MatrixXf Session::ReconstructField(const Reconstruction& recon,
+                                          const VectorField& field,
+                                          const Eigen::MatrixXf& recon_mask) const
+{
+    ReconstructionSolver solver = reconstruction_solver.load();
+    if(solver == RECON_FRANKOT_CHELLAPPA)
+    {
+        if(mask_apply
+        && recon_mask.rows() == field.height
+        && recon_mask.cols() == field.width)
+        {
+            VectorField masked = field;
+            masked.u = field.u.array() * recon_mask.array();
+            masked.v = field.v.array() * recon_mask.array();
+            return recon.ComputeFC(masked);
+        }
+
+        return recon.ComputeFC(field);
+    }
+
+    return recon.Compute(field, recon_mask);
+}
+
 void Session::ScaleFields()
 {
-    // Clamp parameters to physically valid minimums to prevent division by zero
+    // Clamp parameters to physically valid minimums to prevent division by zero.
     float   t    = std::max(opticalparameters.t,    0.001f);
     float   P_px = std::max(opticalparameters.P_px, 0.001f);
     float   Z_d  = std::max(opticalparameters.Z_d,  0.001f);
@@ -493,7 +503,10 @@ void Session::ScaleFields()
     float   f    = std::max(opticalparameters.f,    0.001f);
     float   n    = std::max(opticalparameters.n,    0.001f);
 
-    // Convert pixel displacement -> dn/dx, fully scaled
+    // scale converts raw pixel displacement into displayed gradient units
+    // (dn/dx or mm/dx). surf_fac is the physical correlation-grid spacing in
+    // the sample plane, used to convert the reconstructed grid-integrated
+    // surface into final display units.
     float Z_B   = Z_d + Z_a;
     float z_i   = f * Z_B / (Z_B - f);
 
@@ -724,6 +737,23 @@ float Session::GetFullEtaSeconds() const
 bool Session::IsRunningFullPipeline() const
 {
     return full_pipeline_running.load();
+}
+
+void Session::SetReconstructionSolver(ReconstructionSolver solver)
+{
+    ReconstructionSolver current = reconstruction_solver.load();
+    if(current == solver)
+        return;
+
+    reconstruction_solver.store(solver);
+
+    if(GetStageState(STAGE_RECON) == Done)
+        stagestates[STAGE_RECON] = Dirty;
+}
+
+ReconstructionSolver Session::GetReconstructionSolver() const
+{
+    return reconstruction_solver.load();
 }
 
 StageState Session::GetStageState(Stages s) const

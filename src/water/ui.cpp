@@ -72,7 +72,7 @@ void UI::Draw()
 
 void UI::DrawLoadPanel()
 {
-    if(!pending_ref_path.empty())
+    if(!pending_ref_path.empty() && !session.IsRunning())
     {
         session.LoadRef(pending_ref_path);
 
@@ -83,7 +83,7 @@ void UI::DrawLoadPanel()
         file_dialog_open = false;
     }
     
-    if(!pending_flow_paths.empty())
+    if(!pending_flow_paths.empty() && !session.IsRunning())
     {
         session.LoadFlow(pending_flow_paths);
 
@@ -115,8 +115,8 @@ void UI::DrawLoadPanel()
     else
         ImGui::TextDisabled("No file loaded");
 
-    bool was_open = file_dialog_open;
-    if(was_open) ImGui::BeginDisabled();
+    bool load_controls_disabled = file_dialog_open || session.IsRunning();
+    if(load_controls_disabled) ImGui::BeginDisabled();
 
     if(ImGui::Button("Browse##ref"))
     {
@@ -125,7 +125,7 @@ void UI::DrawLoadPanel()
         SDL_ShowOpenFileDialog(OnRefSelected, this, nullptr, filters, 2, nullptr, false);
     }
 
-    if(was_open) ImGui::EndDisabled();
+    if(load_controls_disabled) ImGui::EndDisabled();
 
     ImGui::SeparatorText("Flow Images");
 
@@ -145,7 +145,7 @@ void UI::DrawLoadPanel()
         ImGui::EndChild();
     }
 
-    if(was_open) ImGui::BeginDisabled();
+    if(load_controls_disabled) ImGui::BeginDisabled();
 
     if(ImGui::Button("Browse##flow"))
     {
@@ -154,12 +154,15 @@ void UI::DrawLoadPanel()
         SDL_ShowOpenFileDialog(OnFlowSelected, this, nullptr, filters, 2, nullptr, true); // allow_many=true
     }
 
-    if(was_open) ImGui::EndDisabled();
+    if(load_controls_disabled) ImGui::EndDisabled();
 
     if(session.GetFlowCount() > 1)
   {
       ImGui::SeparatorText("Active Image");
       int idx = session.GetActiveIndex();
+
+      if(session.IsRunning())
+          ImGui::BeginDisabled();
 
       if(ImGui::Button("< Prev") && idx > 0)
       {
@@ -183,6 +186,9 @@ void UI::DrawLoadPanel()
       }
       ImGui::SameLine();
       ImGui::Text("%d / %d", idx + 1, session.GetFlowCount());
+
+      if(session.IsRunning())
+          ImGui::EndDisabled();
   }
 
     ImGui::End();
@@ -196,6 +202,9 @@ void UI::DrawParametersPanel()
     ImGui::Begin("Parameters", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);*/
 
     ImGui::Begin("Parameters", nullptr);
+    bool controls_disabled = session.IsRunning();
+    if(controls_disabled)
+        ImGui::BeginDisabled();
 
     ImGui::SeparatorText("Correlation Parameters");
     ImGui::PushItemWidth(-100.0f);
@@ -212,6 +221,9 @@ void UI::DrawParametersPanel()
     {
         ImGui::SliderInt("PID Iterations", &session.correlatorparameters.pid_iterations, 1, 4);
         ImGui::SliderFloat("PID Relaxation", &session.correlatorparameters.pid_relaxation, 0.1f, 1.0f, "%.2f");
+        
+        ImGui::PopItemWidth();
+        ImGui::PushItemWidth(-120.0f);
         ImGui::SliderInt("PID Smooth Passes", &session.correlatorparameters.pid_smoothing_passes, 0, 3);
     }
     session.correlatorparameters.pid_iterations = std::max(0, session.correlatorparameters.pid_iterations);
@@ -235,6 +247,24 @@ void UI::DrawParametersPanel()
     ImGui::TextDisabled("Solve for:");
     if(ImGui::RadioButton("RI Variation (uniform t)",       session.b_ref == true))  session.b_ref = true;
     if(ImGui::RadioButton("Thickness Variation (uniform n)", session.b_ref == false)) session.b_ref = false;
+
+    ImGui::TextDisabled("Integrate with:");
+    ReconstructionSolver solver = session.GetReconstructionSolver();
+    if(ImGui::RadioButton("Masked Poisson", solver == RECON_POISSON))
+    {
+        session.SetReconstructionSolver(RECON_POISSON);
+        solver = RECON_POISSON;
+    }
+    if(ImGui::RadioButton("Frankot-Chellappa", solver == RECON_FRANKOT_CHELLAPPA))
+    {
+        session.SetReconstructionSolver(RECON_FRANKOT_CHELLAPPA);
+        solver = RECON_FRANKOT_CHELLAPPA;
+    }
+
+    if(solver == RECON_POISSON)
+        ImGui::TextDisabled("Mask is treated as an unknown domain outside the sample.");
+    else
+        ImGui::TextDisabled("Mask zeros u and v outside the sample before FC integration.");
 
     ImGui::Checkbox("Field Correction", &session.n_correction);
 
@@ -260,6 +290,9 @@ void UI::DrawParametersPanel()
     ImGui::PushItemWidth(-230.0f);
     ImGui::InputFloat("Dot Diameter (mm)", &session.opticalparameters.d_bg, 0.05f);
     ImGui::PopItemWidth();
+
+    if(controls_disabled)
+        ImGui::EndDisabled();
 
     ImGui::End();
 
@@ -687,7 +720,7 @@ void UI::DrawCorrelation()
             {
                 const char* unit = (correlation_map == 2) ? ""
                                  : show_raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
-                ImGui::SetTooltip("%.4f%s", (*maps[correlation_map])(row, col), unit);
+                ImGui::SetTooltip("%.4e%s", (*maps[correlation_map])(row, col), unit);
             }
         }
 
@@ -849,7 +882,7 @@ void UI::DrawVal()
             {
                 const char* unit = (val_map == 2) ? ""
                                  : show_raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
-                ImGui::SetTooltip("%.4f%s", (*maps[val_map])(row, col), unit);
+                ImGui::SetTooltip("%.4e%s", (*maps[val_map])(row, col), unit);
             }
         }
 
@@ -1209,6 +1242,7 @@ void UI::DrawFlowPanel()
         if(session.mask_apply)
         {
             bool image_hovered = ImGui::IsItemHovered(); 
+            bool can_edit_mask = !session.IsRunning();
 
             ImDrawList* draw = ImGui::GetWindowDrawList();
             ImVec2 mouse = ImGui::GetMousePos();
@@ -1231,13 +1265,13 @@ void UI::DrawFlowPanel()
             static bool dragging_center = false;
             static bool dragging_radius = false;
 
-            if(image_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            if(can_edit_mask && image_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 if(near_center)     dragging_center = true;
                 else if(near_edge)  dragging_radius = true;
             }
 
-            if(ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            if(!can_edit_mask || ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             {
                 dragging_center = false;
                 dragging_radius = false;
@@ -1300,6 +1334,7 @@ void UI::DrawRefPanel()
         if(session.mask_apply)
         {
             bool image_hovered = ImGui::IsItemHovered(); 
+            bool can_edit_mask = !session.IsRunning();
 
             ImDrawList* draw = ImGui::GetWindowDrawList();
             ImVec2 mouse = ImGui::GetMousePos();
@@ -1322,13 +1357,13 @@ void UI::DrawRefPanel()
             static bool dragging_center = false;
             static bool dragging_radius = false;
 
-            if(image_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            if(can_edit_mask && image_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 if(near_center)     dragging_center = true;
                 else if(near_edge)  dragging_radius = true;
             }
 
-            if(ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            if(!can_edit_mask || ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             {
                 dragging_center = false;
                 dragging_radius = false;
@@ -1410,7 +1445,8 @@ void UI::DrawSavePanel()
     ImGui::SeparatorText("Export");
 
     bool saving = session.IsSaving();
-    if(saving) ImGui::BeginDisabled();
+    bool save_action_disabled = saving || session.IsRunning();
+    if(save_action_disabled) ImGui::BeginDisabled();
 
     if(ImGui::Button("Save All", ImVec2(-1, 0)))
     {
@@ -1418,7 +1454,7 @@ void UI::DrawSavePanel()
         session.SaveAsync(base);
     }
 
-    if(saving) ImGui::EndDisabled();
+    if(save_action_disabled) ImGui::EndDisabled();
 
     if(saving)
         ImGui::Text("Saving...");

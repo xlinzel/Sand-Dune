@@ -1,0 +1,1648 @@
+\documentclass[11pt]{article}
+
+% ── Page geometry ──────────────────────────────────────────────────────────────
+\usepackage[a4paper, top=25mm, bottom=28mm, left=20mm, right=20mm]{geometry}
+
+% ── Fonts ──────────────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}          % Palatino for body text and math
+\usepackage{microtype}
+
+% ── Math / science ─────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+
+% ── Layout ─────────────────────────────────────────────────────────────────────
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{setspace}
+
+% ── Color (loaded before hyperref and colortbl) ────────────────────────────────
+\usepackage[dvipsnames]{xcolor}
+\definecolor{accent}{HTML}{1B4F8A}       % deep navy blue
+\definecolor{accentlight}{HTML}{EBF2FA}  % pale blue for table header rows
+\definecolor{codebg}{HTML}{F4F6F9}       % near-white blue-tinted code background
+\definecolor{codenums}{HTML}{A0B4C8}     % muted blue-gray for line numbers
+
+% ── Figures / tables ───────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage[labelfont=bf, font=small]{caption}
+
+% ── Code – tcolorbox with listings ────────────────────────────────────────────
+\usepackage{listings}
+\usepackage[breakable,skins,listings]{tcolorbox}
+
+% C++ code style (used inside cppcode environment)
+\lstdefinestyle{cppinner}{
+  language=C++,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{accent}\bfseries,
+  commentstyle=\color{gray!70}\itshape,
+  stringstyle=\color{BurntOrange},
+  numbers=left,
+  numberstyle=\tiny\color{codenums},
+  numbersep=10pt,
+  tabsize=4,
+  breaklines=true,
+  showstringspaces=false,
+  keepspaces=true
+}
+
+% Plain-text format style (used inside fmtcode environment)
+\lstdefinestyle{fmtinner}{
+  language={},
+  basicstyle=\ttfamily\small,
+  numbers=none,
+  tabsize=4,
+  breaklines=true,
+  showstringspaces=false
+}
+
+% Styled C++ code block: flat bg, accent left rule, no frame border
+\newtcblisting{cppcode}[1][]{
+  enhanced, breakable,
+  arc=0pt, outer arc=0pt,
+  colback=codebg,
+  colframe=codebg,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{accent},
+  top=5pt, bottom=5pt, left=4pt, right=4pt,
+  listing only,
+  listing options={style=cppinner},
+  #1
+}
+
+% Styled plain-text format block: neutral bg, gray left rule
+\newtcblisting{fmtcode}[1][]{
+  enhanced, breakable,
+  arc=0pt, outer arc=0pt,
+  colback=gray!5,
+  colframe=gray!5,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{gray!45},
+  top=5pt, bottom=5pt, left=4pt, right=4pt,
+  listing only,
+  listing options={style=fmtinner},
+  #1
+}
+
+% ── Headers / footers ──────────────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray!65} Sand Dune \textperiodcentered\ BOS System Documentation}
+\fancyhead[R]{\small\color{gray!65} \leftmark}
+\fancyfoot[C]{\small\color{gray!65} \thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+% ── Section formatting ─────────────────────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\large\bfseries\color{accent}}
+  {\thesection}{1em}{}
+  [{\vspace{2pt}\color{accent!30}\hrule height 0.6pt\vspace{4pt}}]
+\titleformat{\subsection}
+  {\normalsize\bfseries}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalsize\itshape}
+  {\thesubsubsection}{1em}{}
+\titlespacing{\section}{0pt}{2.5ex}{1.2ex}
+\titlespacing{\subsection}{0pt}{2ex}{0.8ex}
+
+% ── Links ──────────────────────────────────────────────────────────────────────
+\usepackage[colorlinks=true, linkcolor=accent, citecolor=accent!80!black,
+            urlcolor=accent!80!black]{hyperref}
+\usepackage{xurl}
+\urlstyle{tt}
+
+% ── Custom commands ────────────────────────────────────────────────────────────
+% Inline code: accent-colored monospace, with line-break permission after
+% common delimiters so long identifiers don't overflow the right margin.
+\newcommand{\codefmt}[1]{%
+  \begingroup
+  \ttfamily
+  \hyphenchar\font=`\-
+  \emergencystretch=3em
+  \hspace{0pt}#1\hspace{0pt}%
+  \endgroup}
+\newcommand{\code}[1]{{\color{accent!85!black}\codefmt{#1}}}
+\newcommand{\file}[1]{{\color{accent!70!black}\codefmt{#1}}}
+\newcommand{\cls}[1]{{\bfseries\color{accent}\codefmt{#1}}}
+\newcommand{\param}[1]{{\color{accent!60!black}\codefmt{#1}}}
+
+% ── Figure borders ─────────────────────────────────────────────────────────────
+% Use \figimg instead of \includegraphics to get a tight black border.
+\newcommand{\figimg}[2][]{%
+  \tcbox[enhanced, arc=4pt,
+         boxrule=4pt, colframe=black, colback=white,
+         boxsep=0pt, left=0pt, right=0pt, top=0pt, bottom=0pt]{%
+    \includegraphics[#1]{#2}}%
+}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{4cm}
+  {\Huge\bfseries Sand Dune\par}
+  \vspace{0.5em}
+  {\large Design, Modeling, and Validation of a\\
+   Background Oriented Schlieren System \\
+   for High Resolution Refractive Index Mapping \\
+   of Transparent Media\par}
+  \vspace{2em}
+  \hrule
+  \vspace{1.5em}
+  {\large Xander Linzel\\
+   \href{mailto:xander.linzel@irradiant.tech}{\texttt{xander.linzel@irradiant.tech}}\par}
+  \vspace{1em}
+  {\normalsize \today\par}
+  \vfill
+  \begin{abstract}
+    \setlength{\parindent}{0pt}
+    Sand Dune is a custom Background Oriented Schlieren (BOS) system for
+    quantitative measurement of weak refractive disturbances in transparent
+    media. The project combines a dedicated optical rig with a desktop
+    application that handles image loading, windowed cross-correlation,
+    vector validation, surface reconstruction, visualization, and export.
+    This document describes the optical geometry and physical model, the
+    numerical processing pipeline in detail, how to use the application,
+    and the testing strategy used to validate the software during development.
+  \end{abstract}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+
+Background Oriented Schlieren converts transverse refractive index gradients into an
+image-registration problem. A structured background pattern is imaged through
+a transparent specimen, and local refractive-index gradients cause apparent
+displacements of the pattern in the recorded image. Comparing a reference
+image (no specimen) with a disturbed image (specimen present) and measuring
+those pixel shifts gives the gradient field of the refractive-index distribution.
+Integrating those gradients yields a relative surface map of either the
+refractive-index variation or the thickness variation of the sample,
+depending on which quantity is assumed known.
+
+BOS is attractive for weak optical disturbances, the kind where
+interferometry would be impractical and shadowgraphy lacks quantitative
+resolution. However, the accuracy of the final result depends on the entire
+measurement chain: background pattern design, optical geometry, image quality,
+sub-pixel estimation, validation, and reconstruction. Sand Dune was built to
+address that full problem as a single coherent system rather than as a
+stand-alone post-processing utility.
+
+This document is organized as follows.
+Section~\ref{sec:system} describes the physical setup.
+Section~\ref{sec:model} presents the BOS optical model and the scaling
+equations implemented in the code.
+Section~\ref{sec:pipeline} describes each stage of the processing pipeline in
+detail, including the cross-correlator, CMM sub-pixel solver, optional PID
+deformation correction, validation, and surface reconstruction.
+Section~\ref{sec:software} documents the codebase organization and key classes.
+Section~\ref{sec:usage} explains how to use the application.
+Section~\ref{sec:validation} summarizes the validation strategy and presents
+the development-verification precision figures used to characterize the
+current implementation.
+Section~\ref{sec:precision} derives a minimum resolvable gradient for
+the current optical configuration and compares it to the expected
+measurement range.
+Section~\ref{sec:calibration} discusses practical calibration.
+Section~\ref{sec:caveats} lists known caveats in the current implementation.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{System Design}
+\label{sec:system}
+
+\subsection{Measurement Objective}
+
+Sand Dune targets weak to moderate refractive disturbances in transparent
+samples, a regime where displacements are often sub-pixel, smooth, and
+low in magnitude. This makes the measurement sensitive to small errors at
+every stage: optical alignment, background contrast, sub-pixel fitting, and
+reconstruction. The physical system was therefore designed around three
+practical constraints:
+
+\begin{itemize}[noitemsep]
+  \item stable optical alignment between camera, specimen, and background,
+  \item repeatable sample positioning,
+  \item a background pattern with sufficiently dense local texture for
+        reliable sub-pixel cross-correlation.
+\end{itemize}
+
+\subsection{Optical Layout}
+
+In the assembled rig, a camera with a fixed focal-length lens images a
+patterned background target. The specimen or flow field is placed between
+the background and the lens. The four geometric parameters that define this
+layout are $Z_d$, $Z_a$, $f$, and $P_{px}$. These quantities are introduced
+formally in Section~\ref{sec:params}; here it is sufficient to note that
+they correspond to measurable hardware properties and inter-component
+distances set during assembly and calibration.
+
+The system is closely aligned with the BOS geometry described by
+Raffel~\cite{raffel2015bos} and with later work on weak-flow extraction
+using dense background texture and careful geometric design~\cite{liu2022uavbos}.
+
+\subsection{Physical Hardware}
+
+The hardware consists of a camera, a fixed focal-length imaging lens, a
+patterned background target, a rigid support structure, and a specimen region
+between the background and the lens. The region of interest may occupy only
+part of the image frame, so the software supports a circular mask that
+restricts the reconstruction domain to the sample area and excludes the
+holder and other irrelevant structure. A custom holder was designed so that
+the specimen position is repeatable and the masked reconstruction domain
+matches the useful optical aperture of the setup.
+
+\begin{figure}[H]
+  \centering
+  \figimg[width=0.5\linewidth]{hardware_cad.jpg}
+  \caption{CAD design of Sand Dune optical rig showing camera, lens, specimen region,
+           and patterned background target.}
+  \label{fig:hardware}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \figimg[width=0.5\linewidth]{hardware_rig.jpg}
+  \caption{Assembled Sand Dune optical rig showing camera, lens, specimen region,
+           and patterned background target.}
+  \label{fig:background}
+\end{figure}
+
+\subsubsection{Illumination}
+
+The background is illuminated by an LED backlight panel operated at full
+brightness. An incoherent light source is essential: coherent sources
+(lasers) produce speckle in the image plane, which adds structured noise
+to the cross-correlation and degrades sub-pixel accuracy. LEDs are suitable
+because they are spatially incoherent.
+
+A blue optical filter is placed in the illumination path. White-light
+sources produce chromatic aberration,
+which manifests as colour fringing around high-contrast
+dot edges and introduces a small but systematic bias into the correlation
+displacement estimate. The blue filter narrows the effective spectral
+bandwidth, reducing chromatic aberration without requiring an apochromatic
+lens.
+
+\subsubsection{Background Patterns}
+
+Six printed background patterns were fabricated, covering two dot densities
+(40\,\% and 60\,\% fill) and three physical dot diameters (0.10\,mm,
+0.50\,mm, and 0.75\,mm). The pattern is chosen to match the imaging
+magnification so that each dot projects to approximately 4--5 pixels on
+the sensor. This size is the practical optimum for FFT-based cross-correlation:
+
+\begin{itemize}[noitemsep]
+  \item Dots smaller than $\sim3$\,px are under-sampled; the correlation
+        peak is narrow and noisy, and the CMM bicubic fit has insufficient
+        support to resolve sub-pixel offsets accurately.
+  \item Dots larger than $\sim7$\,px reduce the number of independent
+        features per interrogation window, lowering the signal-to-noise
+        ratio of the correlation peak.
+  \item At 4--5\,px the peak is well-resolved, the CMM objective has a
+        smooth, broad basin, and the S2N ratio is typically maximised.
+\end{itemize}
+
+Dot focus is equally important. An out-of-focus pattern blurs the dots to
+larger apparent diameters and reduces edge contrast. Both effects degrade
+the correlation peak shape, which CMM relies on for sub-pixel mapping.
+The background should be focused as sharply as the camera optics allow.
+
+The 40\,\% density patterns provide more inter-dot spacing and are better
+suited to large interrogation windows or coarser magnification. The 60\,\%
+density patterns pack more texture per window and are preferred when small
+window sizes are used or when the dot diameter is near the lower end of the
+4--5\,px range. For the present optical configuration, the 0.10\,mm,
+40\,\% density pattern provides the most reliable correlation quality. For
+future configurations, the background should be re-selected after checking
+the projected dot size and the resulting correlation quality with the
+software.
+
+\subsubsection{Imaging Lens and Upgrade Path}
+
+The current setup uses a \textbf{25\,mm fixed focal-length lens}. This
+provides a field of view and working distance compatible with the present
+sample size and mechanical layout. A longer focal-length lens remains a
+reasonable design option for future versions of the rig, but in BOS the
+consequences are best understood in terms of spatial specificity and the
+geometry required to preserve a usable field of view.
+
+At fixed $Z_a$, increasing $f$ enlarges the background image on the sensor,
+so each interrogation window corresponds to a smaller physical region in the
+sample plane. In BOS terms this makes the measurement more spatially
+specific: a localized refractive disturbance influences a narrower family of
+rays, which reduces lateral cross-talk between neighbouring regions and can
+make fine optical structure easier to isolate. The practical tradeoffs are:
+
+\begin{itemize}
+  \item \textbf{Improved locality of the BOS response.} Because each pixel
+        subtends a narrower bundle of rays at the sample plane, refractive
+        features that are close together are less likely to contaminate the
+        same interrogation windows. This can improve the lateral specificity
+        of both the gradient fields and the reconstructed surface.
+
+  \item \textbf{Background re-matching becomes necessary.} At the same
+        stand-off distance, the background dots project to more pixels, so
+        the physical dot diameter usually has to be reduced to remain in the
+        preferred 4--5\,px range. A longer lens therefore normally requires
+        a different background pattern even if the rest of the rig is
+        unchanged.
+
+  \item \textbf{Field coverage becomes the primary geometric constraint.}
+        If the same sample area must remain visible, the camera commonly has
+        to be moved farther from the specimen and background. That change
+        modifies $Z_a$, $Z_B$, and the sample-plane grid spacing, so the
+        final BOS sensitivity is determined by the full reconfigured
+        geometry rather than by focal length alone.
+
+  \item \textbf{Sensitivity and specificity no longer move together
+        automatically.} A longer lens can improve locality of the measured
+        disturbance while still forcing a larger stand-off distance to keep
+        the full sample in view. Depending on how the rig is re-scaled, that
+        can either help or partially offset the increase in measurable
+        pixel displacement.
+
+  \item \textbf{Focus tolerance becomes tighter.} Longer lenses have
+        shallower depth of field at a given aperture and working distance,
+        so the background pattern and specimen surfaces must be positioned
+        more carefully to avoid differential blur across the optical path.
+
+  \item \textbf{Lens quality matters more as magnification increases.}
+        Any substitution should be evaluated experimentally for contrast,
+        aberration, and repeatability with the intended background pattern,
+        because those effects directly influence the correlation peak shape
+        used by the sub-pixel solver.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BOS Measurement Model}
+\label{sec:model}
+
+\subsection{Optical Parameters}
+\label{sec:params}
+
+The software uses the following optical parameters, all configurable through
+the \textbf{Parameters} panel:
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \rowcolor{accentlight} Symbol & Parameter name in UI & Description \\
+  \midrule
+  $P_{px}$ & Pixel pitch & Sensor pixel pitch (\si{\micro\metre/pixel}) \\
+  $f$      & Focal length & Lens focal length (\si{mm}) \\
+  $Z_d$    & $Z_d$ & Background-to-sample distance (\si{mm}) \\
+  $Z_a$    & $Z_a$ & Sample-to-lens front principal plane distance (\si{mm}) \\
+  $Z_B$    & N/A & $Z_B = Z_a + Z_d$, background-to-lens distance (\si{mm}) \\
+  $t$      & Thickness & Sample thickness (\si{mm}) \\
+  $n$      & Index & Sample refractive index (dimensionless) \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+The image distance for the background plane follows the thin-lens relation:
+\begin{equation}
+  z_i = \frac{f Z_B}{Z_B - f}.
+  \label{eq:zi}
+\end{equation}
+The lateral magnification of the background plane onto the sensor is
+\begin{equation}
+  m_1 = \frac{z_i}{Z_B}.
+  \label{eq:mag}
+\end{equation}
+
+\subsection{What BOS Actually Measures}
+\label{sec:opl}
+
+BOS fundamentally measures the gradient of the \emph{optical path length}
+(OPL) through the sample, not the refractive index or the thickness
+independently. The optical path length through a sample at lateral position
+$(x, y)$ is
+\begin{equation}
+  \mathrm{OPL}(x,y) = \int_0^t n(x, y, z)\,dz,
+\end{equation}
+where the integral runs along the optical axis through the full sample depth.
+For a sample that is thin relative to $Z_a$ and optically homogeneous in
+depth but varying laterally, this reduces to $\mathrm{OPL}(x,y) \approx
+n(x,y)\,t$.
+
+A lateral OPL gradient bends the transmitted ray. In the present software,
+that effect is modeled with a thin-slab, weak-deflection approximation in
+which the local angular deflection is proportional to the transverse
+refractive-index gradient:
+\begin{equation}
+  \varepsilon_x
+  \approx \frac{t}{n}\,\frac{\partial n}{\partial x},
+  \label{eq:deflection}
+\end{equation}
+with the same expression used in the implemented scaling law. This model
+assumes a sample of approximately uniform thickness, weak angular
+deflection, and negligible variation through the optical depth.
+This deflected ray appears to originate from a laterally shifted background
+position. The apparent shift in the background plane is
+\begin{equation}
+  \Delta x_{\mathrm{bg}} = \varepsilon_x\,Z_d,
+\end{equation}
+and after projection through the imaging optics the corresponding
+image-plane displacement in physical units is
+\begin{equation}
+  \Delta x_{\mathrm{img}} = \varepsilon_x\,Z_d\,\frac{z_i}{Z_B}.
+  \label{eq:imgshift}
+\end{equation}
+In pixels, $u_{px} = \Delta x_{\mathrm{img}} / P_{px}$.
+
+\paragraph{Decoupling limitation.}
+Because BOS measures OPL, it cannot independently separate $n(x,y)$ from
+$t(x,y)$ without additional information. The two reconstruction modes in
+the software address this by assuming one quantity is known:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{RI Variation (dn mode):} the sample thickness $t$ is assumed
+        known and spatially uniform; the software reconstructs a relative
+        refractive-index field $\Delta n(x,y)$.
+  \item \textbf{Thickness Variation (mm mode):} the sample refractive index
+        $n$ is assumed known and spatially uniform; the software reconstructs
+        thickness variation $\Delta t(x,y)$.
+\end{itemize}
+
+Both modes are simplifications of the more general OPL measurement.
+Any variation in the quantity assumed to be fixed will appear as a spurious
+contribution to the reconstructed field.
+
+\paragraph{Other physical contributions.}
+Several effects beyond the OPL gradient influence the measured displacement
+and should be considered when interpreting results:
+\begin{itemize}[noitemsep]
+  \item \textbf{Refraction at flat surfaces:} a ray entering a flat-faced
+        sample at an angle undergoes lateral displacement by Snell's law
+        even with no internal RI gradient. This geometric offset scales with
+        sample thickness and off-axis angle, and is addressed by the optional
+        field correction (Section~\ref{sec:refcorr}).
+  \item \textbf{Sample tilt:} if the sample faces are not perpendicular to
+        the optical axis, a systematic displacement offset is introduced
+        across the entire field. This appears as a planar background in the
+        $u$ and $v$ maps and in the reconstructed surface.
+  \item \textbf{Defocus of background texture:} the effective background
+        contrast changes slightly with RI variations, because the sample
+        acts as a weak lens. In practice this effect is very small for weak
+        disturbances.
+\end{itemize}
+
+\subsection{Displacement-to-Gradient Scaling}
+\label{sec:corrscale}
+
+The conversion from a raw pixel displacement to a physical gradient is
+implemented in \cls{Session}\allowbreak\code{::ScaleFields()}. Combining
+Equations~\eqref{eq:deflection} and~\eqref{eq:imgshift} gives
+\begin{equation}
+  u_{px} = \frac{\Delta x_{\mathrm{img}}}{P_{px}}
+         = \frac{t}{n}\,\frac{\partial n}{\partial x}\,
+           \frac{Z_d}{P_{px}}\frac{z_i}{Z_B},
+\end{equation}
+where, for readability in the equations below, $P_{px}$ is interpreted in
+\si{mm/pixel}. In the UI and code implementation the pixel pitch is entered
+in \si{\micro\metre/pixel}, so \cls{Session}\allowbreak\code{::ScaleFields()}
+multiplies it by $10^{-3}$ before applying the same formulas.
+
+Using
+\begin{equation}
+  \frac{z_i}{Z_B} = \frac{f}{Z_B-f},
+\end{equation}
+the RI-variation inversion becomes
+\begin{equation}
+  \frac{\partial n}{\partial x}
+  =
+  u_{px}\,
+  P_{px}\,
+  \frac{n\,(Z_B - f)}{f\,Z_d\,t}.
+\end{equation}
+The code therefore applies the correlation-map scale factor
+\begin{equation}
+  S_{\mathrm{corr}} =
+    P_{px}\,\frac{n\,(Z_B - f)}{f\,Z_d\,t},
+  \label{eq:scorr_dn}
+\end{equation}
+so that
+\begin{equation}
+  \frac{\partial n}{\partial x} = u_{px}\,S_{\mathrm{corr}}.
+\end{equation}
+
+For thickness-variation mode, the implemented model replaces $t$ with
+$(n-1)$:
+\begin{equation}
+  S_{\mathrm{corr}} =
+    P_{px}\,\frac{n\,(Z_B - f)}{f\,Z_d\,(n-1)}.
+  \label{eq:scorr_mm}
+\end{equation}
+
+\subsection{Sample-Plane Grid Spacing}
+\label{sec:gridspacing}
+
+The displacement field is sampled on a correlation grid rather than on
+individual pixels. The grid step (in image pixels) is
+\begin{equation}
+  \texttt{step} = \max\!\bigl(1,\; W - O\bigr),
+  \label{eq:step}
+\end{equation}
+where $W$ is the window size and $O$ is the overlap. The corresponding
+physical spacing in the sample plane is
+\begin{equation}
+  \Delta x_{\mathrm{grid}} =
+    \texttt{step} \cdot P_{px} \cdot \frac{Z_a}{z_i}.
+  \label{eq:dx}
+\end{equation}
+
+\subsection{Surface Scale Factor}
+\label{sec:surfscale}
+
+Because reconstruction integrates gradient values across discrete grid cells,
+the reconstructed surface values must also absorb the physical cell width.
+Therefore the surface scale factor is
+\begin{equation}
+  S_{\mathrm{surf}} = S_{\mathrm{corr}} \times \Delta x_{\mathrm{grid}}.
+  \label{eq:ssurf}
+\end{equation}
+Both the displayed physical axis width and the reconstructed surface
+amplitude therefore depend on the same grid-spacing factor. Correcting the
+geometric parameters to fix the displayed axis also changes the reconstructed
+surface amplitude.
+
+\subsection{Optional Refraction Correction}
+\label{sec:refcorr}
+
+For samples with significant thickness, the curvature of off-axis rays
+through the slab produces a background-plane displacement even for a
+spectrally uniform sample. The software can compute and subtract this
+geometric artifact via \cls{Session}\allowbreak\code{::ComputeRefractionCorrection()}.
+
+For each correlator-grid point at column $c$, row $r$, the correction is
+derived from Snell's law:
+\begin{align}
+  \theta_x &= \arctan\!\left(\frac{r_x}{Z_a}\right), &
+  \theta_y &= \arctan\!\left(\frac{r_y}{Z_a}\right), \\
+  \theta_{r,x} &= \arcsin\!\left(\frac{\sin\theta_x}{n}\right), &
+  \theta_{r,y} &= \arcsin\!\left(\frac{\sin\theta_y}{n}\right),
+\end{align}
+where
+\begin{equation}
+  r_x = \left(c - \frac{w}{2}\right)\,\texttt{step}\,P_{px}\,\frac{Z_a}{z_i}
+\end{equation}
+is the sample-plane lateral position, with an analogous expression for
+$r_y$.
+
+The lateral displacement of the ray inside the slab is
+\begin{equation}
+  d_x = \frac{\sin(\theta_x - \theta_{r,x})}{\cos\theta_{r,x}}\,t,
+\end{equation}
+and similarly for $d_y$. Projecting back to the sensor plane and converting
+to pixels gives the correction field that is subtracted before any further
+scaling.
+
+This correction should be considered an optional preprocessing step.
+Its importance scales with both sample thickness and the departure of $n$
+from unity: for samples with refractive indices close to 1, the Snell's-law offset is very small and
+the correction has negligible impact on the final result. It becomes
+progressively more important as $n$ increases or as $t$ grows large.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Processing Pipeline}
+\label{sec:pipeline}
+
+Figure~\ref{fig:pipeline} shows the three-stage pipeline.
+
+\begin{figure}[H]
+  \centering
+  \textit{(Pipeline diagram can be placed here.)}
+  \caption{Overview of the Sand Dune processing pipeline.}
+  \label{fig:pipeline}
+\end{figure}
+
+\subsection{Stage 1: Cross-Correlation}
+
+\subsubsection{Image Preparation}
+
+Images are loaded as normalized floating-point matrices by the \cls{Image}
+class. Pixel values are mapped to $[0,1]$. The correlator operates directly
+on these Eigen matrices without further preprocessing.
+
+\subsubsection{Window Grid}
+
+The image is divided into a regular grid of overlapping interrogation windows.
+For a window size $W$ and overlap $O$, the grid step is given by
+Equation~\eqref{eq:step}. The number of grid columns and rows is
+\begin{equation}
+  n_c = \left\lfloor \frac{W_{\mathrm{img}} - W}{\texttt{step}} \right\rfloor + 1,
+  \qquad
+  n_r = \left\lfloor \frac{H_{\mathrm{img}} - W}{\texttt{step}} \right\rfloor + 1.
+\end{equation}
+
+\subsubsection{FFT Cross-Correlation}
+
+For each window pair (reference and flow), the correlator:
+\begin{enumerate}[noitemsep]
+  \item extracts the two interrogation blocks,
+  \item skips the window if the local variance is below $10^{-3}$ (flat patch),
+  \item subtracts the local mean from each window,
+  \item computes the forward FFT of both windows,
+  \item forms the cross-power spectrum
+        $G = \overline{F_{\mathrm{ref}}}\,F_{\mathrm{flow}}$,
+  \item applies the inverse FFT to obtain the raw correlation map,
+  \item shifts the map so that zero displacement lies at the center.
+\end{enumerate}
+
+The resulting map $\phi$ satisfies
+\begin{equation}
+  \phi = \mathcal{F}^{-1}\!\left\{\overline{F_{\mathrm{ref}}}\,F_{\mathrm{flow}}\right\}.
+\end{equation}
+
+The signal-to-noise ratio is defined as
+\begin{equation}
+  \mathrm{s2n} = \frac{\phi_1}{\phi_2},
+\end{equation}
+where $\phi_1$ is the primary peak value and $\phi_2$ is the highest value
+outside a $\pm 2$-pixel exclusion zone around the primary peak.
+
+\subsubsection{CMM Sub-Pixel Refinement}
+\label{sec:cmm}
+
+Sub-pixel refinement is implemented using the Correlation Mapping Method
+(CMM) of Chen and Katz~\cite{chen2005cmm}. The solver operates on a
+$5 \times 5$ patch centred on the discrete peak.
+
+The objective is to minimize the mean-normalized patch residual
+\begin{equation}
+  \varepsilon = \sum_{i=0}^{24}
+    \left(\tilde{\phi}[i] - \tilde{\phi}'[i]\right)^2,
+  \label{eq:cmm_obj}
+\end{equation}
+where $\tilde{\phi}[i] = \phi[i] / \bar{\phi}$ is the measured patch
+normalized by its mean, and $\tilde{\phi}'[i]$ is the autocorrelation patch
+evaluated at the sub-pixel offset $(u', v')$ via bicubic interpolation.
+The autocorrelation patch is built once per window from the saved reference
+FFT.
+
+Minimization proceeds as follows:
+\begin{enumerate}[noitemsep]
+  \item \textbf{Seed:} a log-parabola fit along the dominant axis gives an
+        initial $(u_0', v_0')$.
+  \item \textbf{Gauss--Newton:} up to 8 iterations with backtracking line
+        search (step sizes $\{1, 0.5, 0.25, 0.1, 0.05\}$). The Jacobian
+        uses the analytic bicubic derivative.
+  \item \textbf{Grid fallback:} if the Gauss--Newton solution does not improve
+        the seed, a dense grid search on a $0.01$-pixel grid is used.
+  \item \textbf{Boundary handoff:} if the solution is within $0.02$~px of
+        $\pm 0.5$, the adjacent integer cell is tested and the lower-residual
+        representation is kept.
+\end{enumerate}
+
+The solution is clamped to $\lvert u' \rvert \le 0.49$,
+$\lvert v' \rvert \le 0.49$ to prevent ambiguous half-pixel values.
+
+\paragraph{Peak locking.}
+A key motivation for using CMM rather than a simpler centroid or parabolic
+fit is the suppression of peak locking. Conventional sub-pixel estimators
+that fit a symmetric function to the discrete correlation peak are biased
+toward integer and half-integer values, producing characteristic spikes in
+the displacement histogram. CMM avoids this by matching the entire local
+patch shape to a reference autocorrelation rather than fitting only the peak
+tip. The boundary-handoff logic and the clamp at $\pm 0.49$~px are
+additional safeguards that prevent the estimate from locking to cell
+boundaries. The peak-locking fraction is tracked explicitly in the test
+suite (Section~\ref{sec:validation}) to confirm that this behaviour
+remains controlled.
+
+\begin{figure}[H]
+  \centering
+  \figimg[height=12cm]{peak_locking.png} % replace with actual filename
+  \caption{An example of peak locking patterns formed from a soft gradient measurement field.}
+  \label{fig:panel_load}
+\end{figure}
+
+\subsubsection{Progressive Image Deformation (Optional)}
+\label{sec:pid}
+
+When \param{enable\_pid} is active, the correlator performs Progressive
+Image Deformation (PID) to account for local shear and strain in the
+displacement field. PID iteratively warps the interrogation windows to
+match the local deformation model, so that each correlation pass measures
+only the residual displacement after the current best estimate is removed.
+
+\paragraph{Algorithm.} Starting from the baseline rigid-window correlation:
+\begin{enumerate}[noitemsep]
+  \item Compute first-order displacement gradients
+        $\partial u/\partial x$, $\partial u/\partial y$,
+        $\partial v/\partial x$, $\partial v/\partial y$
+        via central differences at the correlator-grid spacing.
+  \item Apply \param{pid\_smoothing\_passes} passes of a $3{\times}3$ box
+        filter to the deformation field.
+  \item For each window, construct an affine warp:
+        $\mathbf{x}_{\mathrm{warped}} = \mathbf{x} + \mathbf{u}(\mathbf{x}_c)
+        + J\,(\mathbf{x} - \mathbf{x}_c)$,
+        where $\mathbf{x}_c$ is the window centre and $J$ is the local
+        deformation Jacobian.
+  \item Resample the flow window using bilinear interpolation and
+        re-correlate to measure the residual displacement.
+  \item Accept the update for a window only if the CMM residual improves
+        (or the S2N improves when residuals are not available).
+  \item Repeat for \param{pid\_iterations} additional passes. If the
+        mean correction across all windows falls below $10^{-3}$~px,
+        terminate early.
+\end{enumerate}
+
+The \param{pid\_relaxation} factor damps the accepted residual updates to
+improve convergence stability.
+
+\subsection{Stage 2: Validation}
+\label{sec:validation_stage}
+
+Validation is implemented in \file{src/grains/validation.cpp} and uses a
+two-pass outlier-detection strategy.
+
+\paragraph{Pass 1: Signal-to-noise threshold.}
+A vector is marked invalid if
+\begin{equation}
+  \mathrm{s2n} < 1.3.
+\end{equation}
+
+\paragraph{Pass 2: Normalized residual (UNO criterion).}
+For each vector the $8$-connected neighbourhood median is computed:
+\begin{equation}
+  u_{\mathrm{med}} = \operatorname{median}\!\bigl(u_k,\; k \in \mathcal{N}_8\bigr).
+\end{equation}
+The normalized deviation is
+\begin{equation}
+  \tilde{u}_{\mathrm{nrm}} =
+    \frac{|u - u_{\mathrm{med}}|}
+         {\operatorname{median}(|u_k - u_{\mathrm{med}}|) + \varepsilon},
+  \qquad \varepsilon = 0.1,
+\end{equation}
+and the vector is flagged if
+\begin{equation}
+  \sqrt{\tilde{u}_{\mathrm{nrm}}^2 + \tilde{v}_{\mathrm{nrm}}^2} > 2.0.
+\end{equation}
+This is the universal outlier detection (UNO) criterion of Westerweel and
+Scarano~\cite{westerweel2005uno}.
+
+\paragraph{Replacement.} All flagged vectors are replaced with the
+$8$-neighbourhood median of the unflagged neighbours.
+
+\subsection{Stage 3: Surface Reconstruction}
+\label{sec:reconstruction}
+
+\subsubsection{Masked Sparse Poisson Solver (Default Method)}
+
+The default reconstruction method builds and solves a sparse linear system
+on the masked correlation grid. Let $s_{i,j}$ be the unknown scalar field on
+valid nodes. Edge gradients are formed as
+\begin{align}
+  g^x_{i,j} &= \tfrac{1}{2}\!\left(u_{i,j} + u_{i,j+1}\right), \\
+  g^y_{i,j} &= \tfrac{1}{2}\!\left(v_{i,j} + v_{i+1,j}\right),
+\end{align}
+and the energy to be minimized is
+\begin{equation}
+  E(s) =
+  \sum_{\text{x-edges}}
+    \!\left(s_{i,j+1} - s_{i,j} - g^x_{i,j}\right)^2
+  +
+  \sum_{\text{y-edges}}
+    \!\left(s_{i+1,j} - s_{i,j} - g^y_{i,j}\right)^2.
+  \label{eq:poisson_energy}
+\end{equation}
+
+Setting $\partial E/\partial s_{i,j} = 0$ yields a standard sparse
+Poisson-style linear system. The domain is restricted to nodes inside the
+mask, so no artificial boundary data is inserted. The system is assembled
+with Eigen triplets and solved using
+\allowbreak\code{Eigen::ConjugateGradient} with tolerance $10^{-5}$ and a maximum of
+$\max(4N,\,200)$ iterations, where $N$ is the number of unknowns.
+
+The constant-offset nullspace is resolved by a soft gauge condition on the
+first valid interior node (pinned to zero). The reconstructed field is
+therefore relative in absolute value but meaningful in shape.
+
+\subsubsection{Frankot--Chellappa (Optional Method)}
+
+The software also provides an FFT-based reconstruction option following
+Frankot and Chellappa~\cite{frankot1988}. This path is exposed in the UI as
+an alternative integrator and is implemented by \allowbreak\code{ComputeFC()}.
+It mirrors the displacement field into a
+$2{\times}2$-tiled domain to enforce periodic boundary conditions and then
+integrates in the frequency domain:
+\begin{equation}
+  \hat{s}(f_x, f_y) =
+    \frac{i f_x\,\hat{u}(f_x,f_y) + i f_y\,\hat{v}(f_x,f_y)}
+         {2\pi(f_x^2 + f_y^2) + \varepsilon}.
+\end{equation}
+
+On full-domain inputs, the Frankot--Chellappa method can produce results
+comparable to the sparse Poisson solver and is substantially faster, since
+it requires only a small number of FFTs regardless of grid size. Its main
+caveat in the present BOS workflow is the treatment of the sample mask.
+The current implementation applies the mask by zeroing $u$ and $v$ outside
+the valid region before the FFT integration. This is convenient and keeps
+the option usable in the UI, but it does not treat the exterior as an
+unknown domain in the same way as the sparse solver. As a result, sharp mask
+boundaries can introduce artificial low-frequency structure near the sample
+edge. For masked aerogel-style datasets, the sparse Poisson solver is
+therefore the default and generally the more trustworthy choice, while
+Frankot--Chellappa remains useful as a fast comparison method on cleaner or
+less heavily masked fields.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Software Architecture}
+\label{sec:software}
+
+\subsection{Build System and Dependencies}
+
+The project is built with CMake (C++23 required). External dependencies are:
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \rowcolor{accentlight} Library & Purpose \\
+  \midrule
+  SDL3, SDL3\_image & Application window, rendering, image file I/O \\
+  Dear ImGui        & All UI panels and controls \\
+  ImPlot            & Heatmap visualizations \\
+  Eigen3            & Dense/sparse linear algebra \\
+  FFTW3 (float)     & FFT cross-correlation and Frankot--Chellappa \\
+  doctest           & Unit-test framework (test binary only) \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+The build produces two targets:
+\begin{itemize}[noitemsep]
+  \item \allowbreak\code{sand\_dune}: the GUI application,
+  \item \allowbreak\code{run\_tests}: the standalone test binary.
+\end{itemize}
+
+\subsection{Module Organization}
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \rowcolor{accentlight} Namespace / directory & Classes & Role \\
+  \midrule
+  \file{src/main.cpp}         &              & Application entry point \\
+  \file{include/session.h},   & \cls{Session}& Pipeline orchestration, scaling, \\
+  \file{src/session.cpp}      &              & async execution, CSV export \\
+  \file{include/grains/}      & \cls{Correlator} & FFT correlation, CMM, PID \\
+  \file{src/grains/}          & \cls{Validation} & Outlier detection \& replacement \\
+                              & \cls{Reconstruction} & Poisson / Frankot--Chellappa integration \\
+  \file{include/water/}       & \cls{UI}, \cls{App} & ImGui panels, SDL3 shell \\
+  \file{src/water/}           &              & \\
+  \file{include/sun/}         & \cls{Image}, \cls{Mask} & Image loading, mask generation \\
+  \file{src/sun/}             &              & \\
+  \file{include/wind/}        & \cls{VectorField} & Displacement-field container \\
+  \file{src/wind/}            & (parameter structs) & \\
+  \file{tests/}               &              & Development verification tests \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Session: Pipeline Orchestrator}
+
+\cls{Session} (\file{include/session.h}) is the top-level controller.
+It owns the input images, all intermediate data arrays, the parameter
+structs, and the stage-state machine:
+
+\begin{cppcode}
+// Images
+Image ref;
+std::vector<Image> flows;
+
+// Intermediate data
+std::vector<VectorField> raw_correlation_field;
+std::vector<VectorField> correlation_field;
+std::vector<VectorField> raw_val_field;
+std::vector<VectorField> val_field;
+std::vector<Eigen::MatrixXf> raw_surface;
+std::vector<Eigen::MatrixXf> surface;
+Eigen::MatrixXf correction[2];  // refraction correction (u, v)
+
+// Parameters
+CorrelatorParameters correlatorparameters;
+OpticalParameters    opticalparameters;
+Mask                 mask;
+
+// Stage state (per stage: Idle, Ready, Busy, Done, Dirty)
+std::atomic<StageState> stagestates[STAGE_TOTAL];
+\end{cppcode}
+
+The three pipeline stages run asynchronously via \allowbreak\code{std::async}.
+The UI polls the stage states to display progress and enables/disables
+run buttons accordingly.
+
+\subsection{Correlator}
+
+\cls{Correlator} (\file{include/grains/correlator.h}) takes a reference
+\cls{Image} and a flow \cls{Image} and returns a \cls{VectorField}.
+Internally it allocates FFTW plans once at construction time and reuses
+the same transform buffers for every window.
+
+\begin{cppcode}
+struct CorrelatorParameters {
+    int   window_size        = 32;
+    int   overlap            = 24;
+    bool  enable_pid         = false;
+    int   pid_iterations     = 2;
+    float pid_relaxation     = 1.0f;
+    int   pid_smoothing_passes = 1;
+};
+\end{cppcode}
+
+The main entry point is \allowbreak\code{Compute(ref, flow)}, which dispatches to
+\allowbreak\code{ComputeWithPid()} or \allowbreak\code{Compute\-SinglePass()} based on \param{enable\_pid}.
+
+\subsection{Reconstruction}
+
+\cls{Reconstruction} (\file{include/grains/reconstruction.h}) provides two
+integration back ends. The default path takes a \cls{VectorField} and a
+binary mask \allowbreak\cls{Eigen\-::MatrixXi}, builds an index map that assigns
+consecutive unknowns only to valid interior cells, constructs the sparse
+system from edge-gradient equations, and calls the Eigen conjugate-gradient
+solver. An FFT-based Frankot--Chellappa path is also available as an
+alternative reconstruction option.
+
+\subsection{VectorField}
+
+\cls{VectorField} (\file{include/wind/vectorfield.h}) stores three
+\allowbreak\code{Eigen::MatrixXf} matrices ($u$, $v$, s2n) and grid dimensions.
+It exposes a \allowbreak\code{SaveCSV(path)} method that writes columns \texttt{col},
+\texttt{row}, \texttt{u}, \texttt{v}, \texttt{s2n} in column-major order.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Using the Application}
+\label{sec:usage}
+
+\subsection{Typical Workflow}
+
+\begin{enumerate}
+  \item \textbf{Load images.} Use the \textbf{Load} panel to browse for a
+        reference image and one or more disturbed (flow) images.
+        All images must share the same pixel dimensions.
+
+  \item \textbf{Set parameters.} In the \textbf{Parameters} panel, enter
+        the optical geometry ($Z_d$, $Z_a$, $f$, $P_{px}$), sample
+        properties ($n$, $t$), and the correlation settings (window size,
+        overlap, PID toggle). The \textbf{Calculations} panel updates in
+        real time to show the derived grid spacing, physical field width,
+        and estimated feature size; use these to check that the window
+        size is sensible for the expected background texture.
+
+  \item \textbf{Configure the mask.} In the \textbf{Parameters} panel,
+        enable the circular mask and set its centre and radius to enclose
+        the sample region. Reconstruction will be confined to this domain.
+
+  \item \textbf{Run the pipeline.} In the \textbf{Pipeline} panel, click
+        \textbf{Run Full Pipeline} to run all three stages sequentially, or run
+        each stage individually. A progress bar and ETA are shown for
+        each stage. With multiple flow images, all frames are processed
+        in the same batch.
+
+  \item \textbf{Inspect results.} Switch between the \textbf{Correlation},
+        \textbf{Validation}, and \textbf{Surface} views using the tabs in
+        the visualization panel. For correlation and validation, select
+        the $u$, $v$, or s2n map, and toggle between raw pixel units and
+        scaled physical units. Adjust the colormap range using the
+        min/max sliders.
+
+  \item \textbf{Export.} In the \textbf{Save} panel, choose an output
+        directory and click \textbf{Save}. Three CSV files are written:
+        \texttt{\_correlation.csv}, \texttt{\_val.csv}, and
+        \texttt{\_surface.csv}. For multi-frame batches, a numeric suffix
+        is appended per frame.
+\end{enumerate}
+
+\subsection{Panel Reference}
+
+\subsubsection{Load Panel}
+
+Provides file-picker buttons to select the reference image and one or
+more flow images. The flow image list supports multi-frame batches.
+When multiple flow images are loaded, navigation arrows are shown in
+the visualization panels to step through frames.
+
+\subsubsection{Parameters Panel}
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \rowcolor{accentlight} Group & Control & Effect \\
+  \midrule
+  Correlation & Window size & Interrogation window side length (pixels) \\
+              & Overlap     & Window overlap (pixels; step = size $-$ overlap) \\
+              & Enable PID  & Enables iterative window deformation \\
+              & PID iterations & Number of PID passes after baseline \\
+              & PID relaxation & Damping on residual updates ($[0,1]$) \\
+              & PID smoothing  & $3{\times}3$ smoothing passes on deformation field \\
+  \midrule
+  Optical     & $P_{px}$       & Sensor pixel pitch (\si{\micro\metre}) \\
+              & $Z_d$          & Background-to-sample distance (\si{mm}) \\
+              & $Z_a$          & Sample-to-lens distance (\si{mm}) \\
+              & $f$            & Lens focal length (\si{mm}) \\
+  \midrule
+  Sample      & $n$            & Sample refractive index \\
+              & $t$            & Sample thickness (\si{mm}) \\
+  \midrule
+  Reconstruction & Mode        & RI variation (dn) or thickness variation (mm) \\
+                 & Apply correction & Subtract Snell's-law refraction offset \\
+  \midrule
+  Mask        & Enable mask    & Restrict reconstruction to circular ROI \\
+              & Centre (x, y)  & Mask centre in correlation-grid coordinates \\
+              & Radius         & Mask radius in correlation-grid cells \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+
+\subsubsection{Calculations Panel}
+
+Displays derived quantities updated in real time from the current
+parameters: correlation-grid step (px), sample-plane grid spacing (mm),
+physical field width (mm), image magnification, and the expected
+pixel displacement for a reference gradient magnitude.
+
+
+\subsubsection{Pipeline Panel}
+
+Shows three stage rows (Correlation, Validation, Reconstruction) each with
+a \textbf{Run} button, a progress bar, and a status label (Idle / Ready /
+Busy / Done / Dirty). A \textbf{Run Full Pipeline} button chains all three stages.
+
+\subsubsection{Visualization Panel}
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Correlation / Validation tabs:} heatmap of the $u$, $v$,
+        or s2n map. A toggle switches between raw pixels and scaled
+        physical units. Min/max sliders control the colormap range.
+  \item \textbf{Surface tab:} heatmap of the reconstructed scalar field.
+        Axes are labelled in physical millimetres. Min/max sliders control
+        the colormap range. A tooltip shows the value under the cursor.
+\end{itemize}
+
+\subsubsection{Save Panel}
+
+Allows choosing an output directory (via system file picker) and exports
+the current results to CSV. Saving runs asynchronously to avoid blocking
+the UI.
+
+\subsubsection{Settings Panel}
+
+Offers a dark/light theme toggle.
+
+\subsection{CSV File Formats}
+
+\paragraph{Correlation and Validation CSV.}
+The correlation and validation result files share the following layout:
+\begin{fmtcode}
+rows, cols
+<height>, <width>
+u, v, s2n
+<u00>, <v00>, <s2n00>
+...
+\end{fmtcode}
+Values are in physical units when optical parameters have been set;
+otherwise they are in raw pixels.
+
+\paragraph{Surface CSV.}
+The surface file uses column-major ordering:
+\begin{fmtcode}
+rows, cols
+<height>, <width>
+<z[0,0]>
+<z[1,0]>
+...
+\end{fmtcode}
+Values are stored in column-major order (all rows of column 0, then
+all rows of column 1, etc.) in the units determined by the selected
+reconstruction mode (dn or mm).
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Validation, Precision, and Repeatability}
+\label{sec:validation}
+
+\subsection{Overview}
+
+Validation is performed at two levels. At the vector level, the pipeline
+uses signal-to-noise thresholding and neighbourhood-median outlier detection
+(Section~\ref{sec:validation_stage}) to clean each displacement field in-line.
+At the software level, the development verification suite in
+\file{tests/test.cpp} was used to characterize numerical behaviour,
+estimate precision, and check for artifacts during implementation. The test
+binary (\allowbreak\code{run\_tests}) is not part of the normal user
+workflow; it exists as a development and regression tool.
+
+\subsection{Image-Based Precision Metric}
+
+The most important quantitative precision figure available for the current
+system comes from the measured image pair \texttt{if\_0.1}, stored under
+\file{images/slides}. This image pair was taken of a glass optical window 
+of known uniform refractive index and thickness. The expected
+displacement field is smooth and nearly planar, so the residual from a
+best-fit plane directly quantifies spurious structure such as striping,
+local roughness, and sub-pixel locking artifacts.
+
+During software verification, the test \textit{Correlation Repo Image Pair}
+fits a least-squares plane to the recovered $u$ and $v$ fields and reports
+the RMS deviation. Results from the current codebase are summarised below.
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \rowcolor{accentlight} Metric & $u$ (px) & $v$ (px) \\
+  \midrule
+  Whole-map RMS, no PID  & 0.659\,215 & 0.669\,790 \\
+  Whole-map RMS, PID     & 0.595\,992 & 0.579\,117 \\
+  Central-crop RMS, no PID & 0.096\,441 & 0.105\,765 \\
+  Central-crop RMS, PID    & 0.048\,692 & 0.045\,640 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+The central crop removes the outer 10\,\% border on each side (containing 
+ringing and artifacts from the sample holder and image edge), leaving the
+central 80\,\% of the map, which is the most representative region for the
+present system. Enabling PID reduces the central-crop RMS by approximately
+\textbf{49.5\,\%} in $u$ and \textbf{56.8\,\%} in $v$.
+
+\subsection{Artifact Diagnostics}
+
+The development verification suite also includes image-based diagnostics
+designed to identify structured artifacts in smooth gradient fields:
+\begin{itemize}[noitemsep]
+  \item \textbf{Striping check:} the dominant-axis autocorrelation of the
+        plane-fit residual field is required to remain below a threshold
+        ($< 0.75$), and the orthogonal-axis correlation must be low
+        ($< 0.10$), to confirm that no spatial periodicity is present.
+  \item \textbf{Peak-locking check:} the fraction of recovered displacement
+        values within $0.03$~px of an integer or half-integer is measured.
+        Excessive concentration at these values indicates sub-pixel bias.
+  \item \textbf{Validated residual ratio:} the ratio of the validation-stage
+        residual to the correlation residual is tracked to confirm that
+        the validation step is not masking systematic errors.
+\end{itemize}
+
+\subsection{Supplementary Software Checks}
+
+In addition to the measured-image verification above, the
+\textit{Correlator Computation} test case in \file{tests/test.cpp} was used
+during development to verify expected behaviour on controlled synthetic
+inputs. These checks are useful regression guards, but they are not the
+primary experimental precision metric for the present system.
+
+\paragraph{Zero displacement.}
+A random-noise image is correlated against itself. The measured RMSE
+against the zero-displacement ground truth is $0.0000$~px, with a
+maximum absolute displacement of $0.0000$~px anywhere on the grid.
+This confirms that the correlator introduces no systematic bias on a
+flat-spectrum input.
+
+\paragraph{Sub-pixel translation.}
+A synthetic spot-field (120 Gaussian spots, $\sigma = 1.1$~px, rendered
+on a $192 \times 192$ grid) is shifted by bilinear interpolation for four
+imposed offsets and the per-shift RMSE against the known ground-truth
+displacement is reported:
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \rowcolor{accentlight} Imposed shift (px) & RMSE (px) \\
+  \midrule
+  $(+0.25,\ -0.30)$ & 0.0633 \\
+  $(+0.10,\ +0.12)$ & 0.0254 \\
+  $(-0.35,\ +0.28)$ & 0.0711 \\
+  $(+0.42,\ -0.18)$ & 0.0714 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+All four cases remain well below the $0.08$~px acceptance threshold,
+confirming that the CMM sub-pixel solver operates correctly across the
+$\pm 0.5$~px cell.
+
+\paragraph{PID affine deformation.}
+A spot-field (160 spots, same parameters) is warped by an affine
+transformation with both translation and first-order shear:
+$u_0 = 1.15$~px, $v_0 = -0.75$~px, $\partial u/\partial x = 0.0105$,
+$\partial u/\partial y = 0.0040$, $\partial v/\partial x = -0.0035$,
+$\partial v/\partial y = 0.0085$. The RMSE against the analytical
+displacement field is compared across iteration counts:
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \rowcolor{accentlight} Method & RMSE (px) \\
+  \midrule
+  Baseline (no PID) & 0.2745 \\
+  PID (2 iterations) & 0.0875 \\
+  PID (3 iterations) & 0.0846 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+Two PID iterations reduce the RMSE by $68.1\,\%$, from $0.2745\,\mathrm{px}$
+to $0.0875\,\mathrm{px}$. The residual is sub-pixel and consistent with the
+correlation noise floor, indicating that the deformation correction removes
+systematic error rather than merely redistributing it. A third iteration
+yields only a further $3.3\,\%$ reduction ($0.0846\,\mathrm{px}$),
+demonstrating the expected diminishing returns: most of the correctable
+deformation error is captured in the first two passes.
+
+\subsection{Repeatability}
+
+Repeatability is evaluated experimentally by acquiring repeated image sets
+under different distance and rotation conditions to asses the measured field:
+\begin{itemize}[noitemsep]
+  \item \textbf{Rotation symmetry:} the repeated acquisition of the sample was 
+  done slightly rotated to assess overall gradient symmetry and mapping quality.
+  \item \textbf{Distance symmetry:} acquisitions at controlled $Z_A$ distances were done to 
+  assess optical parameter impact and repeatability between such changes.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \figimg[width=\linewidth]{repeatability_far.png}
+    \caption{Refractive index map for a further placement from sample to lens.}
+    \label{fig:rep_far}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \figimg[width=\linewidth]{repeatability_near.png}
+    \caption{Refractive index map for a near placement of the same sample.}
+    \label{fig:rep_near}
+  \end{minipage}
+\end{figure}
+
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \figimg[width=\linewidth]{repeatability_far_cor.png}
+    \caption{Refractive index gradient map for a further placement from sample to lens.}
+    \label{fig:rep_rotation}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \figimg[width=\linewidth]{repeatability_near_cor.png}
+    \caption{Refractive index gradient map for a near placement of the same sample.}
+    \label{fig:rep_distance}
+  \end{minipage}
+\end{figure}
+
+The four figures above showed good repeatability and consistency between both changing 
+setup geometries and reference image changes, as each used difference reference patterns for correlation and measurement.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{System Precision Estimate}
+\label{sec:precision}
+
+This section quantifies the minimum resolvable refractive-index gradient for
+the current optical configuration and places it in the context of the weakest
+gradients expected in practice.
+
+\subsection{Current Optical Setup}
+
+The figures below are computed for the following configuration:
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \rowcolor{accentlight} \textbf{Parameter} & \textbf{Symbol} & \textbf{Value} \\
+  \midrule
+  Lens focal length        & $f$       & \SI{25}{mm} \\
+  Background--sample dist. & $Z_d$     & \SI{220}{mm} \\
+  Sample--lens distance    & $Z_a$     & \SI{45}{mm} \\
+  Total object distance    & $Z_B$     & \SI{265}{mm} \\
+  Pixel pitch              & $P_{px}$  & \SI{2.315}{\micro\metre} \\
+  Sample refractive index  & $n$       & $1.08$ \\
+  Sample thickness         & $t$       & \SI{0.924}{mm} \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Minimum Resolvable Gradient}
+
+The minimum detectable displacement is taken as three times the PID
+central-crop plane-fit RMS from the slide validation tests
+(Section~\ref{sec:validation}):
+\begin{equation}
+  u_{\min} = 3 \times 0.049 \approx 0.15~\text{px}.
+\end{equation}
+Using the three-sigma criterion gives a conservative threshold that
+distinguishes genuine signal from measurement noise at high confidence.
+
+The displacement-to-gradient scale factor (Equation~\eqref{eq:scorr_dn}),
+evaluated in SI units throughout, is
+\begin{equation}
+  S_{\mathrm{corr}}
+  = \frac{P_{px}\,(Z_B - f)\,n}{f\,Z_d\,t}
+  = \frac{(2.315\times10^{-6})(240\times10^{-3})(1.08)}
+         {(25\times10^{-3})(220\times10^{-3})(0.924\times10^{-3})}
+  \approx 0.1181~\mathrm{m}^{-1}\,\mathrm{px}^{-1}.
+\end{equation}
+
+The minimum resolvable refractive-index gradient is therefore
+\begin{equation}
+  \left.\frac{dn}{dx}\right|_{\min}
+  = S_{\mathrm{corr}} \times u_{\min}
+  = 0.1181 \times 0.15
+  \approx 1.77\times10^{-2}~\mathrm{m}^{-1}
+  = 1.77\times10^{-5}~\mathrm{dn/mm}.
+\end{equation}
+
+\subsection{Expected Worst-Case Gradient}
+
+As a benchmark, consider a transparent sample with a total refractive-index
+variation of $\Delta n = 0.005$ distributed uniformly across the full sample
+diameter of \SI{24}{mm}. This represents an internally measured contrast
+value assumed to be spread as a slow, gradual gradient over the entire
+aperture, which constitutes the worst case in the sense that the gradient
+is as shallow as it can be for a given total RI excursion:
+\begin{equation}
+  \left.\frac{dn}{dx}\right|_{\mathrm{wc}}
+  = \frac{\Delta n}{d}
+  = \frac{0.005}{24}
+  \approx 2.08\times10^{-4}~\mathrm{dn/mm}.
+\end{equation}
+
+\subsection{Detection Margin}
+
+The ratio of the expected worst-case gradient to the minimum resolvable
+gradient gives the system margin:
+\begin{equation}
+  \text{margin}
+  = \frac{(dn/dx)_{\mathrm{wc}}}{(dn/dx)_{\min}}
+  = \frac{2.08\times10^{-4}}{1.77\times10^{-5}}
+  \approx 11.8.
+\end{equation}
+
+Even in the worst case of a maximally shallow gradient, the current
+system can resolve the expected RI variation by approximately one order
+of magnitude. Steeper local gradients (more concentrated RI variations)
+would be resolved with even greater margin. This confirms that the
+optical sensitivity of the current setup is well matched to the target
+measurement regime.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Calibration and Interpretation}
+\label{sec:calibration}
+
+The most sensitive practical issue is geometric calibration, specifically
+setting $Z_a$ correctly. In the software model, $Z_a$ is an effective optical
+distance, not simply a mechanical measurement from the lens barrel. An
+incorrect $Z_a$ shifts both the displayed field width and the reconstructed
+surface amplitude simultaneously, because both depend on the same
+grid-spacing factor $\Delta x_{\mathrm{grid}}$ (Equation~\eqref{eq:dx}).
+
+The recommended calibration procedure is therefore not a direct ruler
+measurement. Instead:
+\begin{enumerate}[noitemsep]
+  \item Place a target of known physical width in the background plane.
+  \item Record how many pixels span that width.
+  \item Infer the effective magnification and back-calculate $Z_a$ so that
+        the reported field width in the \textbf{Calculations} panel matches
+        the known dimension.
+\end{enumerate}
+
+Once $Z_a$ is correctly calibrated, the surface amplitude will also be
+on the correct absolute scale.
+
+The reconstructed surface is always relative in absolute value (the gauge
+constant is arbitrary), so absolute-offset comparisons between separate
+experiments require an independent reference point.
+
+\subsection{Interpreting Results: Reconstruction vs.\ Gradient Maps}
+
+The reconstruction and the raw displacement maps each reveal different
+aspects of the optical quality of a transparent sample, and both should
+be examined together rather than relying on either alone.
+
+The reconstructed surface (dn or thickness map) gives a global view of
+the spatial distribution of optical path length across the sample.
+Broad, smooth features such as overall refractive-index gradients,
+wedge-shaped thickness variation, or large-scale density non-uniformities
+appear clearly in the integrated field. This view is well suited to
+comparing samples, measuring the amplitude of a known disturbance, or
+checking that the reconstructed field has the expected large-scale shape.
+
+The correlation $u$ and $v$ gradient maps, by contrast, directly show
+where harsh or rapid variations in refractive index occur within the
+sample. Sharp features such as inclusions, bubbles, cracks, or regions
+of steep RI gradient produce strong, localised displacement peaks in these
+maps that may be smeared or suppressed by the spatial-integration step of
+the reconstruction. Examining the gradient maps in addition to the surface
+is therefore important for identifying optically defective regions that
+a smooth reconstruction might underrepresent.
+
+In practice: use the reconstructed surface to characterise the overall
+optical uniformity and quantify the amplitude of large-scale variations;
+use the $u$ and $v$ maps to locate and assess localised optical defects.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Known Caveats}
+\label{sec:caveats}
+
+\subsection{Fundamental Measurement Limitations}
+
+\begin{itemize}
+
+  \item \textbf{Refractive index and thickness cannot be decoupled.}
+        BOS measures the integrated optical path length (OPL) through the
+        sample. A thicker region with uniform refractive index produces
+        exactly the same deflection signal as a thinner region with a
+        higher refractive index. Without an independent thickness
+        measurement (e.g.\ profilometry, OCT), the two contributions
+        cannot be separated from the BOS data alone.
+
+  \item \textbf{The reconstructed map is not a pure refractive-index map.}
+        Although the output is labelled in refractive-index units via the
+        Gladstone-Dale scaling, the deflection signal contains contributions
+        from all sources that bend the light ray:
+        \begin{itemize}[noitemsep]
+          \item refractive index variation within the sample bulk,
+          \item physical tilt or wedge of the sample surfaces (a flat but
+                tilted window deflects light even with perfectly uniform RI),
+          \item surface curvature and figure errors,
+          \item internal stress birefringence (though BOS is not
+                polarisation-resolved and therefore only captures the
+                scalar mean),
+          \item any other optical inhomogeneity along the line of sight.
+        \end{itemize}
+        All of these contribute to the measured gradient field and are
+        integrated into the final surface by the reconstruction step. There
+        is no way to attribute a given feature in the output map to one
+        specific physical cause without additional independent measurements.
+
+  \item \textbf{BOS is a line-of-sight-integrated measurement.}
+        The technique collapses the full 3D refractive-index field onto a
+        single 2D projection. Any variation along the optical axis (depth
+        within the sample) is summed and cannot be resolved. Tomographic
+        BOS can recover 3D structure but requires multiple viewing angles
+        and is not implemented here.
+
+  \item \textbf{Only in-plane deflections are measured.}
+        A refractive-index gradient along the optical axis ($\partial n /
+        \partial z$, i.e.\ along the camera axis) does not deflect the ray
+        laterally and therefore produces no signal. BOS is sensitive only
+        to gradients in the plane perpendicular to the optical axis.
+
+  \item \textbf{The measurement is a gradient, not a direct surface.}
+        The correlation pipeline recovers $\partial(\Delta n \cdot t) /
+        \partial x$ and $\partial(\Delta n \cdot t) / \partial y$. The
+        surface map is obtained by integrating these gradients. Integration
+        accumulates errors: a spatially correlated noise floor in the
+        gradient field can produce low-frequency artefacts in the
+        reconstructed surface that are not present in the gradient maps.
+        Always inspect both the gradient fields and the reconstruction
+        when diagnosing anomalies.
+
+  \item \textbf{Small-angle (paraxial) approximation.}
+        The deflection-angle formula $\varepsilon \approx \tan\varepsilon$
+        is used throughout. For typical BOS setups with small $Z_d / Z_a$
+        ratios and moderate sample-induced deflections, the error is
+        negligible. For large deflections or extreme geometry, the
+        approximation breaks down and a full ray-tracing model is required.
+
+  \item \textbf{The reference image is assumed deflection-free.}
+        Any structured distortion present in the reference image
+        (lens distortion, ambient air turbulence, vibration during
+        acquisition) will appear as a systematic offset in every result
+        derived from that reference. Lens distortion should be corrected
+        or characterised separately; the reference image should be acquired
+        under the same thermal and vibration conditions as the sample
+        images.
+
+  \item \textbf{The gradient field is not guaranteed to be curl-free.}
+        A physically consistent surface has $\partial u / \partial y =
+        \partial v / \partial x$ everywhere. Measurement noise, outliers,
+        and genuine optical effects (e.g.\ diffraction at edges) produce a
+        curl component. The sparse Poisson solver discards this component
+        implicitly by finding the least-squares integrable surface. The
+        discarded curl energy is not reported, so a high-curl field can
+        reconstruct to a smooth-looking surface while hiding significant
+        measurement inconsistency.
+
+\end{itemize}
+
+\subsection{Software and Implementation Caveats}
+
+\begin{itemize}
+
+  \item \textbf{Frankot--Chellappa remains an option, but its mask treatment
+        is weaker.}
+        The default reconstruction path is the masked sparse Poisson solver.
+        Frankot--Chellappa can still be selected in the UI, but in the
+        current implementation the mask is enforced by zeroing the gradient
+        field outside the sample before the FFT solve. This can introduce
+        boundary-driven artifacts that the sparse masked-domain solver avoids.
+
+  \item \textbf{Reconstructed surface is relative.}
+        The constant-offset degree of freedom is resolved by a gauge
+        condition on one interior node. The absolute offset has no
+        physical meaning.
+
+  \item \textbf{Field correction is applied before the ``raw'' correlation
+        view.}
+        The stored raw correlation field already has the Snell's-law
+        correction subtracted when that option is enabled. The ``raw''
+        label in the UI refers to pixel-unit (unscaled) data, not
+        uncorrected data.
+
+  \item \textbf{Validation criteria are not uniformly applied across all
+        code paths.}
+        The main post-processing path uses both S2N and UNO thresholding.
+        Some alternative overloads apply only the S2N pass.
+
+  \item \textbf{Reconstruction progress granularity.}
+        Each full sparse solve is counted as one progress step. For small
+        masks or small grids, the progress bar may jump rather than
+        advance smoothly.
+
+  \item \textbf{Geometry calibration is critical.}
+        An incorrectly set $Z_a$ shifts both the spatial axis and the
+        surface amplitude by the same factor. Always calibrate against a
+        known physical target before interpreting absolute values.
+
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+
+Sand Dune is a complete BOS measurement system for mapping weak optical
+non-uniformities in transparent media at high spatial resolution.
+Background pattern design, optical layout, calibration, cross-correlation,
+validation, and reconstruction all contribute directly to the quality of the
+final result. The current software combines FFT-based
+windowed cross-correlation, CMM sub-pixel refinement (with optional PID
+window deformation), UNO-based vector validation, and a selectable
+reconstruction stage with masked sparse Poisson integration as the default
+and Frankot--Chellappa as an alternative option.
+
+At present, the most meaningful precision figure is the best-fit-plane RMS
+obtained from the measured \texttt{if\_0.1} dataset on the central crop:
+approximately $0.049$~px in $u$ and $0.046$~px in $v$ with PID enabled.
+These figures provide a quantitative development-verification benchmark for
+the current implementation and establish the noise floor used elsewhere in
+this document. The next additions to the report should be the final
+repeatability figures and the completed geometry-calibration results so
+that the link between the hardware configuration and the measured absolute
+scales can be documented fully.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\begin{thebibliography}{99}
+
+\bibitem{raffel2015bos}
+M.~Raffel.
+\newblock Background-oriented schlieren (BOS) techniques.
+\newblock \emph{Experiments in Fluids}, 56:60, 2015.
+
+\bibitem{chen2005cmm}
+J.~Chen and J.~Katz.
+\newblock Elimination of peak-locking error in PIV analysis using the
+  correlation mapping method.
+\newblock \emph{Measurement Science and Technology}, 16(8):1605--1618, 2005.
+
+\bibitem{westerweel2005uno}
+J.~Westerweel and F.~Scarano.
+\newblock Universal outlier detection for PIV data.
+\newblock \emph{Experiments in Fluids}, 39(6):1096--1100, 2005.
+
+\bibitem{frankot1988}
+R.~T.~Frankot and R.~Chellappa.
+\newblock A method for enforcing integrability in shape from shading algorithms.
+\newblock \emph{IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  10(4):439--451, 1988.
+
+\bibitem{agrawal2006}
+A.~Agrawal, R.~Chellappa, and R.~Raskar.
+\newblock What is the range of surface reconstructions from a gradient field?
+\newblock In \emph{Proceedings of ECCV}, pages 578--591, 2006.
+
+\bibitem{liu2022uavbos}
+X.~Liu, T.~Guo, P.~Zhang, Z.~Jia, and X.~Tong.
+\newblock Extraction of a weak flow field for a multi-rotor unmanned aerial
+  vehicle using high-speed background-oriented schlieren technology.
+\newblock \emph{Sensors}, 22(1):43, 2022.
+
+\end{thebibliography}
+
+\end{document}

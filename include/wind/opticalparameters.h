@@ -7,11 +7,11 @@
 struct OpticalParameters
 {
     // --- Sample properties ---
-    float t   = 1.0f;   ///< Known sample thickness used for refraction correction (mm).
-    float n   = 1.08f;  ///< Refractive index of the sample (used for correction and thickness scaling).
+    float t   = 1.0f;   ///< Known sample thickness used for RI scaling and refraction correction (mm).
+    float n   = 1.08f;  ///< Refractive index used for refraction correction and thickness-mode scaling.
 
     // --- Camera / lens ---
-    float P_px = 2.315f; ///< Sensor pixel pitch (um).
+    float P_px = 2.315f; ///< Sensor pixel pitch (um). This is a sensor property, not a lens property.
     float f    = 25.0f;  ///< Lens focal length (mm).
 
     // --- Setup geometry ---

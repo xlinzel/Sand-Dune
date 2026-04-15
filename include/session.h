@@ -39,6 +39,13 @@ enum Stages
     STAGE_TOTAL  ///< Sentinel - total number of stages.
 };
 
+/// @brief Available surface-integration back ends.
+enum ReconstructionSolver
+{
+    RECON_POISSON,           ///< Mask-aware least-squares Poisson solve on the correlation grid.
+    RECON_FRANKOT_CHELLAPPA  ///< FFT-based Frankot-Chellappa integration.
+};
+
 /// @brief Top-level controller for the BOS surface reconstruction pipeline.
 ///
 /// Manages image loading, the three-stage processing pipeline (Correlation -> Validation -> Reconstruction),
@@ -107,9 +114,10 @@ public:
     // -------------------------------------------------------------------------
     ///@{
 
-    /// @brief Convert raw pixel displacements to physical units (dn or mm) using the optical parameters.
+    /// @brief Convert raw pixel displacements to displayed gradient units and final surface units.
     ///
-    /// Scales correlation/validation fields and the reconstructed surface.
+    /// Correlation/validation fields are scaled to dn/dx or mm/dx, while the
+    /// reconstructed surface additionally absorbs the physical correlation-grid spacing.
     void ScaleFields();
 
     ///@}
@@ -149,7 +157,7 @@ public:
     const std::vector<std::string>& GetFlowPaths() const;
 
     const VectorField&    GetCorrelationField() const; ///< Scaled correlation field for the active frame.
-    const VectorField&    GetRawCorrelationField() const; ///< Unscaled correlation field for the active frame (pixels).
+    const VectorField&    GetRawCorrelationField() const; ///< Pixel-unit correlation field for the active frame after optional correction.
     const VectorField&    GetValField()  const; ///< Validated field for the active frame.
     const VectorField&    GetRawValField()  const; ///< Unscaled validated field for the active frame (pixels).
     const Eigen::MatrixXf& GetSurface() const; ///< Reconstructed surface for the active frame.
@@ -172,6 +180,12 @@ public:
     /// @brief True while the combined RunAllAsync() pipeline is active.
     bool IsRunningFullPipeline() const;
 
+    /// @brief Select the reconstruction back end used by the reconstruction stage.
+    void SetReconstructionSolver(ReconstructionSolver solver);
+
+    /// @brief Query the active reconstruction back end.
+    ReconstructionSolver GetReconstructionSolver() const;
+
     ///@}
 
     // -------------------------------------------------------------------------
@@ -181,7 +195,7 @@ public:
     int   posx = 0,    posy = 0; ///< Mask centre in field coordinates (col, row).
     int   radius = 1000;         ///< Mask radius in field units.
     float a = 0.2f;              ///< Tukey roll-off parameter [0, 1].
-    bool  mask_apply = true;     ///< Apply the mask to reconstruction outputs when true.
+    bool  mask_apply = true;     ///< Restrict reconstruction to the masked domain when true.
     ///@}
 
     CorrelatorParameters correlatorparameters; ///< Window size and overlap for correlation.
@@ -221,30 +235,40 @@ private:
     // -------------------------------------------------------------------------
     ///@{
 
-    /// @brief Pre-compute the per-pixel refraction correction matrices for a field of size h x w.
+    /// @brief Pre-compute the refraction-correction matrices for a correlator grid of size h x w.
     ///
     /// Calculates the lateral ray displacement caused by refraction through a sample of known
-    /// thickness (@p OpticalParameters::t) and refractive index (@p OpticalParameters::n).
+    /// thickness (@p OpticalParameters::t) and refractive index (@p OpticalParameters::n),
+    /// then maps that displacement onto the correlation grid in pixel units.
     void ComputeRefractionCorrection(int h, int w);
 
     /// @brief Subtract the pre-computed correction matrices from all raw_correlation_field entries.
     void ApplyRefractionCorrection();
 
+    /// @brief Build the active reconstruction mask in correlation-grid coordinates.
+    Eigen::MatrixXf GetReconstructionMask(int width, int height);
+
+    /// @brief Dispatch to the selected reconstruction back end.
+    Eigen::MatrixXf ReconstructField(const Reconstruction& recon,
+                                     const VectorField& field,
+                                     const Eigen::MatrixXf& recon_mask) const;
+
     ///@}
 
-    std::vector<VectorField> raw_correlation_field; ///< Per-frame correlation fields in pixel units after correction.
-    std::vector<VectorField> correlation_field;     ///< Per-frame correlation fields after correction and scaling.
-    Eigen::MatrixXf correction[2];          ///< Refraction correction matrices for u [0] and v [1].
+    std::vector<VectorField> raw_correlation_field; ///< Per-frame correlation fields in pixel units after optional correction.
+    std::vector<VectorField> correlation_field;     ///< Per-frame correlation fields in displayed gradient units.
+    Eigen::MatrixXf correction[2];                  ///< Refraction correction matrices for u [0] and v [1], stored in pixel units.
 
-    std::vector<VectorField> raw_val_field; ///< Per-frame validated fields in pixel units.
-    std::vector<VectorField> val_field;     ///< Per-frame validated fields after scaling.
+    std::vector<VectorField> raw_val_field; ///< Per-frame validated fields in pixel units after optional correction.
+    std::vector<VectorField> val_field;     ///< Per-frame validated fields in displayed gradient units.
 
-    std::vector<Eigen::MatrixXf> raw_surface; ///< Per-frame surfaces before scaling.
+    std::vector<Eigen::MatrixXf> raw_surface; ///< Per-frame reconstructed surfaces in grid-integrated raw units.
     std::vector<Eigen::MatrixXf> surface;     ///< Per-frame surfaces in final display units (dn or mm).
 
     int active_index = 0;
 
     std::atomic<StageState> stagestates[STAGE_TOTAL];
+    std::atomic<ReconstructionSolver> reconstruction_solver{RECON_POISSON};
 
     // Async
     std::atomic<bool> stop_requested{false};
