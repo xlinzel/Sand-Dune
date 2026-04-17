@@ -842,9 +842,11 @@ TEST_CASE("Slide Gradient Diagnostics")
         auto gradient_summary = [](const char* axis, const GradientDiagnostic& diag, bool include_halves)
         {
             std::ostringstream out;
-            out << "corr(main)=" << FormatFloat(diag.metrics.expected_corr, 4)
-                << " corr(ortho)=" << FormatFloat(diag.metrics.orthogonal_corr, 4)
-                << " residual=" << FormatFloat(diag.metrics.residual_ratio, 4);
+            out << "main-axis corr=" << FormatFloat(diag.metrics.expected_corr, 4)
+                << " (>0.75)"
+                << " cross-axis corr=" << FormatFloat(diag.metrics.orthogonal_corr, 4)
+                << " (<0.10)"
+                << " residual ratio=" << FormatFloat(diag.metrics.residual_ratio, 4);
             if(include_halves)
                 out << " halves=[" << FormatFloat(diag.metrics.neg_side_mean, 4)
                     << ", " << FormatFloat(diag.metrics.pos_side_mean, 4) << "]";

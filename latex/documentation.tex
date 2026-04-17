@@ -1177,17 +1177,31 @@ present system. Enabling PID reduces the central-crop RMS by approximately
 
 The development verification suite also includes image-based diagnostics
 designed to identify structured artifacts in smooth gradient fields:
-\begin{itemize}[noitemsep]
-  \item \textbf{Striping check:} the dominant-axis autocorrelation of the
-        plane-fit residual field is required to remain below a threshold
-        ($< 0.75$), and the orthogonal-axis correlation must be low
-        ($< 0.10$), to confirm that no spatial periodicity is present.
+\begin{itemize}
+  \item \textbf{Striping check:} the cropped displacement field is compared
+        against its expected gradient axis using a normalized correlation
+        coefficient. For the \texttt{if\_0.1} image pair, the raw $u$ and $v$
+        fields give dominant-axis correlations of $0.9985$ and $0.9981$,
+        while the orthogonal-axis correlations are only $0.0052$ and $0.0068$.
+        After validation, these become $0.9985$ and $0.9982$ on the dominant
+        axis, with orthogonal-axis correlations of $0.0052$ and $0.0067$.
+        These values show a strongly one-dimensional gradient with no visible
+        cross-axis striping in the central cropped region.
   \item \textbf{Peak-locking check:} the fraction of recovered displacement
-        values within $0.03$~px of an integer or half-integer is measured.
-        Excessive concentration at these values indicates sub-pixel bias.
+        values locked near the half-pixel bands is measured together with the
+        size of the largest connected locked region. For \texttt{if\_0.1}, the
+        measured locked fractions are $0.0430$ and $0.0436$ for the raw $u$
+        and $v$ fields, and $0.0425$ and $0.0431$ after validation. The
+        largest connected locked regions contain $21$ cells in $u$ and $27$
+        cells in $v$, both before and after validation, indicating that any
+        peak-locking is weak and spatially limited. Additionally, some gradient
+        points may be close to peak values and contributing to this metric inadvertently.
   \item \textbf{Validated residual ratio:} the ratio of the validation-stage
         residual to the correlation residual is tracked to confirm that
-        the validation step is not masking systematic errors.
+        validation does not hide structured error. For \texttt{if\_0.1}, the
+        residual ratio decreases from $0.0517$ to $0.0505$ in $u$ and from
+        $0.0554$ to $0.0538$ in $v$, showing a small cleanup of the field
+        without altering its dominant gradient structure.
 \end{itemize}
 
 \subsection{Supplementary Software Checks}
