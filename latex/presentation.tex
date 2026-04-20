@@ -689,7 +689,7 @@
       \]
       \small $u_{\mathrm{med}}$: 8-connected neighbourhood median.
 
-      \vspace{0.3em}
+      \vspace{0.5em}
       \textbf{Replacement:} flagged vectors $\rightarrow$ 8-neighbourhood median of unflagged neighbours.
       \end{minipage}
     \column{0.45\textwidth}
@@ -901,16 +901,20 @@
       \[
         u_{\min} = 3\times0.049 \approx 0.15~\text{px}
       \]
-      $S_{\mathrm{corr}} \approx 0.1181~\mathrm{m}^{-1}\mathrm{px}^{-1}$
+      \[
+        S_{\mathrm{corr}} \approx 0.1181~\mathrm{m}^{-1}\mathrm{px}^{-1}
+      \]
 
       \textbf{Min.\ resolvable gradient:}
       \[
         \left.\tfrac{dn}{dx}\right|_{\!\min} \approx 1.77\times10^{-5}~\mathrm{dn/mm}
       \]
+      \vspace{0.1cm}
       \textbf{Worst-case expected} ($\Delta n{=}0.005$ over 24\,mm):
       \[
         \left.\tfrac{dn}{dx}\right|_{\!\mathrm{wc}} \approx 2.08\times10^{-4}~\mathrm{dn/mm}
       \]
+      \vspace{0.1cm}
       \[
         \textbf{Detection margin} \approx \mathbf{11.8\times}
       \]
@@ -945,7 +949,7 @@
 
         \vspace{0.3em}
         \textbf{Use the $u$/$v$ gradient maps to:}\\
-        Locate localised defects --- inclusions, bubbles, cracks, steep-gradient regions --- that may be smeared or suppressed by the integration step.
+        Locate localised defects, inclusions, bubbles, cracks, steep-gradient regions, that may be smeared or suppressed by the integration step.
 
         \vspace{0.3em}
         \emph{Always inspect both together.}
@@ -976,7 +980,6 @@
         \item \textbf{Curl-free assumption}: Poisson solver discards non-integrable curl silently; high-curl field can look deceptively smooth
         \item \textbf{FC mask treatment} weaker than sparse Poisson for masked domains
         \item \textbf{Surface is relative}: gauge constant is arbitrary
-        \item \textbf{Validation not uniformly applied}: some overloads use S2N pass only
         \item \textbf{Geometry calibration critical}: incorrect $Z_a$ shifts both field width and amplitude by the same factor
       \end{itemize}
   \end{columns}
@@ -1006,19 +1009,11 @@
       Central-crop plane-fit RMS with PID:\\
       $\approx0.049$\,px ($u$) and $0.046$\,px ($v$)
     \column{0.41\textwidth}
-      \vspace{-0.5cm}
+      \vspace{1cm}
       \begin{block}{Detection Margin}
         \centering\large
         $\mathbf{11.8\times}$ margin over worst-case gradient.
       \end{block}
-      \vspace{0.35em}
-      \begin{alertblock}{Next Steps}
-        \begin{itemize}
-          \item Final experimental repeatability figures
-          \item Completed geometry-calibration results
-          \item Full hardware-to-absolute-scale documentation
-        \end{itemize}
-      \end{alertblock}
       \vspace{0.35em}
       \footnotesize \textbf{Refs:} Raffel (2015) $\cdot$ Chen \& Katz (2005) $\cdot$ Westerweel \& Scarano (2005) $\cdot$ Frankot \& Chellappa (1988) $\cdot$ Agrawal et al.\ (2006) $\cdot$ Liu et al.\ (2022)
   \end{columns}
