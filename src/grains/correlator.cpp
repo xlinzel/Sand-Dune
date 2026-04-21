@@ -256,15 +256,34 @@ VectorField Correlator::ComputeSinglePass(const Eigen::MatrixXf& reference, cons
 VectorField Correlator::ComputeWithPid(const Eigen::MatrixXf& reference, const Eigen::MatrixXf& flow,
                                        std::function<void(float)> on_progress)
 {
-    int total_passes = 1 + std::max(0, pid_iterations);
     auto make_progress = [&](int pass_index)
     {
         if(!on_progress)
-            return std::function<void(float)>{};
+        return std::function<void(float)>{};
 
         return std::function<void(float)>([&, pass_index](float p)
         {
-            on_progress((pass_index + p) / static_cast<float>(total_passes));
+            p = std::clamp(p, 0.0f, 1.0f);
+
+            float rigid_w = 1.0f;
+            float pid_w   = 2.92f;
+            float total_w = rigid_w + pid_iterations * pid_w;
+
+            float done_before = 0.0f;
+            float current_w   = rigid_w;
+
+            if(pass_index == 0)
+            {
+                done_before = 0.0f;
+                current_w   = rigid_w;
+            }
+            else
+            {
+                done_before = rigid_w + (pass_index - 1) * pid_w;
+                current_w   = pid_w;
+            }
+
+            on_progress((done_before + current_w * p) / total_w);
         });
     };
 
