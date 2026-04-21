@@ -1,72 +1,66 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(sand_dune)
+project(sand_dune LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(SDL3 REQUIRED)
-find_package(SDL3_image REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
+find_package(SDL3_image CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+find_package(implot CONFIG REQUIRED)
+find_package(Eigen3 CONFIG REQUIRED)
+find_package(FFTW3 CONFIG REQUIRED)
 
-if(WIN32)
-    find_package(imgui REQUIRED)
-    find_package(implot REQUIRED)
+if(TARGET SDL3_image::SDL3_image)
+    set(SDL3_IMAGE_TARGET SDL3_image::SDL3_image)
+elseif(TARGET SDL3_image::SDL3_image-shared)
+    set(SDL3_IMAGE_TARGET SDL3_image::SDL3_image-shared)
+elseif(TARGET SDL3_image::SDL3_image-static)
+    set(SDL3_IMAGE_TARGET SDL3_image::SDL3_image-static)
 else()
-    include(FetchContent)
-    FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG        v1.91.8
-    )
-    FetchContent_MakeAvailable(imgui)
-    add_library(imgui_fetched STATIC
-        ${imgui_SOURCE_DIR}/imgui.cpp
-        ${imgui_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
-    )
-    target_include_directories(imgui_fetched PUBLIC
-        ${imgui_SOURCE_DIR}
-        ${imgui_SOURCE_DIR}/backends
-    )
-    target_link_libraries(imgui_fetched PUBLIC SDL3::SDL3)
-    add_library(imgui::imgui ALIAS imgui_fetched)
+    message(FATAL_ERROR "Could not determine the SDL3_image target exported by the installed package.")
 endif()
 
-find_package(Eigen3 REQUIRED)
-if(NOT WIN32)
-    set(FFTW3f_DIR "/usr/lib/cmake/fftw3")
+if(TARGET FFTW3::fftw3f)
+    set(FFTW3F_LINK_TARGET FFTW3::fftw3f)
+else()
+    find_library(FFTW3F_LIBRARY_RELEASE NAMES fftw3f REQUIRED PATH_SUFFIXES lib)
+    find_library(FFTW3F_LIBRARY_DEBUG NAMES fftw3f PATH_SUFFIXES debug/lib)
 endif()
-find_package(FFTW3f REQUIRED)
-if(NOT TARGET FFTW3::fftw3f)
-    add_library(FFTW3::fftw3f SHARED IMPORTED)
-    set_target_properties(FFTW3::fftw3f PROPERTIES
-        IMPORTED_LOCATION "/usr/lib/libfftw3f.so"
-        INTERFACE_INCLUDE_DIRECTORIES "/usr/include"
-    )
-endif()
+
 # Core library
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
 list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 
 add_library(dune_core ${SOURCES})
-target_include_directories(dune_core PUBLIC include)
-target_link_libraries(dune_core PUBLIC SDL3::SDL3)
-target_link_libraries(dune_core PUBLIC Eigen3::Eigen)
-target_link_libraries(dune_core PUBLIC FFTW3::fftw3f)
+target_include_directories(dune_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if(DEFINED FFTW3_INCLUDE_DIRS)
+    target_include_directories(dune_core PUBLIC ${FFTW3_INCLUDE_DIRS})
+endif()
+
+target_link_libraries(dune_core
+    PUBLIC
+        SDL3::SDL3
+        ${SDL3_IMAGE_TARGET}
+        imgui::imgui
+        implot::implot
+        Eigen3::Eigen
+)
+
+if(DEFINED FFTW3F_LINK_TARGET)
+    target_link_libraries(dune_core PUBLIC ${FFTW3F_LINK_TARGET})
+elseif(FFTW3F_LIBRARY_DEBUG)
+    target_link_libraries(dune_core PUBLIC optimized "${FFTW3F_LIBRARY_RELEASE}" debug "${FFTW3F_LIBRARY_DEBUG}")
+else()
+    target_link_libraries(dune_core PUBLIC "${FFTW3F_LIBRARY_RELEASE}")
+endif()
 
 # Main executable
 add_executable(sand_dune src/main.cpp)
-target_link_libraries(sand_dune PRIVATE
-    dune_core
-    SDL3::SDL3
-    SDL3_image::SDL3_image
-    imgui::imgui
-    implot::implot
-)
+target_link_libraries(sand_dune PRIVATE dune_core)
 
 # Tests
 file(GLOB TEST_SOURCES "tests/*.cpp")

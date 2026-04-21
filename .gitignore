@@ -1,4 +1,6 @@
 build/
+build-x64/
+.deps/
 .vscode/
 csv/
 bos_pattern/

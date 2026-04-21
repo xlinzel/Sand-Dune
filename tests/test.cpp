@@ -184,7 +184,7 @@ auto FormatTime = [](std::chrono::steady_clock::time_point start,
 
 TEST_CASE("Image Loading")
 {
-    const std::string image_path = std::string(PROJECT_DIR) + "/images/ref.bmp";
+    const std::string image_path = std::string(PROJECT_DIR) + "/images/slides/ref.bmp";
 
     //Initializaiton and then load
     Image image;
@@ -1000,8 +1000,8 @@ TEST_CASE("Full Pipeline Test")
     //-----------------------------------------------------------------------------
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
-    session.LoadRef(std::string(PROJECT_DIR) + "/images/ref.bmp");
-    session.LoadFlow({std::string(PROJECT_DIR) + "/images/flow.bmp"});
+    session.LoadRef(std::string(PROJECT_DIR) + "/images/slides/ref.bmp");
+    session.LoadFlow({std::string(PROJECT_DIR) + "/images/slides/flow.bmp"});
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";
