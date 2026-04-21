@@ -58,6 +58,52 @@ function Resolve-CommandPath {
     throw "Required command '$Name' was not found. Install it or make sure it is available to this shell."
 }
 
+function Ensure-Doxygen {
+    $doxygenPath = Find-ExistingPath @(
+        ((Get-Command doxygen -ErrorAction SilentlyContinue | Select-Object -First 1).Source),
+        (Join-Path $env:ProgramFiles "doxygen\bin\doxygen.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "doxygen\bin\doxygen.exe")
+    )
+
+    if ($doxygenPath) {
+        Write-Host "Using existing Doxygen at $doxygenPath" -ForegroundColor Cyan
+        $env:PATH = "{0};{1}" -f (Split-Path -Parent $doxygenPath), $env:PATH
+        return
+    }
+
+    $wingetPath = Find-ExistingPath @(
+        ((Get-Command winget -ErrorAction SilentlyContinue | Select-Object -First 1).Source),
+        (Join-Path $env:LocalAppData "Microsoft\WindowsApps\winget.exe")
+    )
+
+    if (-not $wingetPath) {
+        Write-Host "Doxygen was not found and winget is unavailable. Skipping Doxygen installation." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "Installing Doxygen with winget" -ForegroundColor Cyan
+    Invoke-CheckedCommand "Installing Doxygen" $wingetPath @(
+        "install",
+        "--exact",
+        "--id", "DimitriVanHeesch.Doxygen",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+        "--disable-interactivity"
+    )
+
+    $installedDoxygenPath = Find-ExistingPath @(
+        (Join-Path $env:ProgramFiles "doxygen\bin\doxygen.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "doxygen\bin\doxygen.exe")
+    )
+
+    if ($installedDoxygenPath) {
+        $env:PATH = "{0};{1}" -f (Split-Path -Parent $installedDoxygenPath), $env:PATH
+        Write-Host "Doxygen installed at $installedDoxygenPath" -ForegroundColor Green
+    } else {
+        Write-Host "Doxygen install completed, but its path was not detected in the usual location." -ForegroundColor Yellow
+    }
+}
+
 function Clear-BrokenLoopbackProxy {
     $proxyVariables = @("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
     $clearedAny = $false
@@ -133,6 +179,7 @@ function Import-VisualStudioEnvironment {
 $targetArch = if ($Triplet -eq "x64-windows") { "x64" } else { "x86" }
 $vsInstall = Import-VisualStudioEnvironment -TargetArch $targetArch
 Clear-BrokenLoopbackProxy
+Ensure-Doxygen
 
 $gitExe = Resolve-CommandPath "git" @(
     (Join-Path $env:LocalAppData "Programs\Git\cmd\git.exe"),
