@@ -16,6 +16,7 @@
 #include <sstream>
 #include <fstream>
 #include <filesystem>
+#include <SDL3/SDL_filesystem.h>
 
 //NOTE: Many tests were written by AI, but then reviewed to ensure correctness
 
@@ -23,6 +24,51 @@ namespace
 {
 constexpr int kTestWindowSize = 32;
 constexpr int kTestOverlap = 24;
+
+const std::filesystem::path& RepoRoot()
+{
+    static const std::filesystem::path root = []()
+    {
+        std::vector<std::filesystem::path> starts;
+
+        if(const char* base = SDL_GetBasePath())
+            starts.emplace_back(base);
+
+        starts.emplace_back(std::filesystem::current_path());
+
+        for(const auto& start : starts)
+        {
+            std::error_code ec;
+            std::filesystem::path path = std::filesystem::weakly_canonical(start, ec);
+            if(ec)
+            {
+                ec.clear();
+                path = std::filesystem::absolute(start, ec);
+            }
+
+            while(!path.empty())
+            {
+                if(std::filesystem::exists(path / "CMakeLists.txt")
+                && std::filesystem::exists(path / "images"))
+                    return path;
+
+                std::filesystem::path parent = path.parent_path();
+                if(parent == path)
+                    break;
+                path = parent;
+            }
+        }
+
+        return std::filesystem::current_path();
+    }();
+
+    return root;
+}
+
+std::string RepoPath(const std::string& relative)
+{
+    return (RepoRoot() / std::filesystem::path(relative)).string();
+}
 
 std::string FormatFloat(double value, int precision = 6)
 {
@@ -184,7 +230,7 @@ auto FormatTime = [](std::chrono::steady_clock::time_point start,
 
 TEST_CASE("Image Loading")
 {
-    const std::string image_path = std::string(PROJECT_DIR) + "/images/slides/ref.bmp";
+    const std::string image_path = RepoPath("images/slides/ref.bmp");
 
     //Initializaiton and then load
     Image image;
@@ -502,8 +548,8 @@ TEST_CASE("Correlation Repo Image Pair")
     Image ref_image;
     Image flow_image;
 
-    CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_ref.bmp").c_str()).empty());
-    CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/if_0.1_flow.bmp").c_str()).empty());
+    CHECK(ref_image.Load(RepoPath("images/if_0.1_ref.bmp").c_str()).empty());
+    CHECK(flow_image.Load(RepoPath("images/if_0.1_flow.bmp").c_str()).empty());
 
     Correlator baseline(kTestWindowSize, kTestOverlap);
     Correlator pid(MakePidTestParameters());
@@ -799,10 +845,10 @@ TEST_CASE("Slide Gradient Diagnostics")
         {"if_0.1", "if_0.1_ref.bmp", "if_0.1_flow.bmp"}
     };
 
-    std::string output_dir = std::string(PROJECT_DIR) + "/csv/slide_gradient_diagnostics";
+    std::filesystem::path output_dir = RepoRoot() / "csv" / "slide_gradient_diagnostics";
     std::filesystem::create_directories(output_dir);
     PrintSection("Slide Gradient Diagnostics");
-    PrintLine("CSV output", output_dir);
+    PrintLine("CSV output", output_dir.string());
 
     Validation validation;
 
@@ -810,8 +856,8 @@ TEST_CASE("Slide Gradient Diagnostics")
     {
         Image ref_image;
         Image flow_image;
-        CHECK(ref_image.Load((std::string(PROJECT_DIR) + "/images/" + pair.ref_name).c_str()).empty());
-        CHECK(flow_image.Load((std::string(PROJECT_DIR) + "/images/" + pair.flow_name).c_str()).empty());
+        CHECK(ref_image.Load(RepoPath(std::string("images/") + pair.ref_name).c_str()).empty());
+        CHECK(flow_image.Load(RepoPath(std::string("images/") + pair.flow_name).c_str()).empty());
 
         Correlator correlator(kTestWindowSize, kTestOverlap);
         VectorField raw = correlator.Compute(ref_image.GetMat(), flow_image.GetMat());
@@ -830,14 +876,14 @@ TEST_CASE("Slide Gradient Diagnostics")
         PlateauMetrics filtered_u_plateau = plateau_metrics(filtered_u.crop);
         PlateauMetrics filtered_v_plateau = plateau_metrics(filtered_v.crop);
 
-        write_matrix_csv(output_dir + "/" + pair.name + "_raw_u_crop.csv", raw_u.crop);
-        write_matrix_csv(output_dir + "/" + pair.name + "_raw_u_residual.csv", raw_u.residual);
-        write_matrix_csv(output_dir + "/" + pair.name + "_raw_v_crop.csv", raw_v.crop);
-        write_matrix_csv(output_dir + "/" + pair.name + "_raw_v_residual.csv", raw_v.residual);
-        write_matrix_csv(output_dir + "/" + pair.name + "_val_u_crop.csv", filtered_u.crop);
-        write_matrix_csv(output_dir + "/" + pair.name + "_val_u_residual.csv", filtered_u.residual);
-        write_matrix_csv(output_dir + "/" + pair.name + "_val_v_crop.csv", filtered_v.crop);
-        write_matrix_csv(output_dir + "/" + pair.name + "_val_v_residual.csv", filtered_v.residual);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_raw_u_crop.csv")).string(), raw_u.crop);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_raw_u_residual.csv")).string(), raw_u.residual);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_raw_v_crop.csv")).string(), raw_v.crop);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_raw_v_residual.csv")).string(), raw_v.residual);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_val_u_crop.csv")).string(), filtered_u.crop);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_val_u_residual.csv")).string(), filtered_u.residual);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_val_v_crop.csv")).string(), filtered_v.crop);
+        write_matrix_csv((output_dir / (std::string(pair.name) + "_val_v_residual.csv")).string(), filtered_v.residual);
 
         auto gradient_summary = [](const char* axis, const GradientDiagnostic& diag, bool include_halves)
         {
@@ -1000,8 +1046,8 @@ TEST_CASE("Full Pipeline Test")
     //-----------------------------------------------------------------------------
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
-    session.LoadRef(std::string(PROJECT_DIR) + "/images/slides/ref.bmp");
-    session.LoadFlow({std::string(PROJECT_DIR) + "/images/slides/flow.bmp"});
+    session.LoadRef(RepoPath("images/slides/ref.bmp"));
+    session.LoadFlow({RepoPath("images/slides/flow.bmp")});
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     std::cout << "Image Loading Elapsed Time: " << FormatTime(begin, end) << "\n";
@@ -1018,7 +1064,7 @@ TEST_CASE("Full Pipeline Test")
     std::cout << "Correlation Elapsed Time: " << FormatTime(begin, end) << "\n";
 
     CHECK(session.GetStageState(STAGE_CORRELATION) == Done);
-    session.GetCorrelationField().SaveCSV(std::string(PROJECT_DIR) + "/csv/result.csv");
+    session.GetCorrelationField().SaveCSV(RepoPath("csv/result.csv"));
 
     //-----------------------------------------------------------------------------
     // VALIDATION
@@ -1029,7 +1075,7 @@ TEST_CASE("Full Pipeline Test")
     std::cout << "Post Process Elapsed Time: " << FormatTime(begin, end) << "\n";
 
     CHECK(session.GetStageState(STAGE_VAL) == Done);
-    session.GetValField().SaveCSV(std::string(PROJECT_DIR) + "/csv/processed.csv");
+    session.GetValField().SaveCSV(RepoPath("csv/processed.csv"));
 
     //-----------------------------------------------------------------------------
     // RECONSTRUCTION
@@ -1044,7 +1090,7 @@ TEST_CASE("Full Pipeline Test")
     const Eigen::MatrixXf& surface = session.GetSurface();
 
     std::ofstream file;
-    file.open((std::string(PROJECT_DIR) + "/csv/surface.csv").c_str());
+    file.open(RepoPath("csv/surface.csv").c_str());
 
     if(!file.is_open())
         return;

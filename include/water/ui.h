@@ -52,17 +52,15 @@ private:
     SDL_Texture* flow_tex = nullptr;
 
     //Generated Images and tracking
-    std::vector<SDL_Texture*> correlation_textures = {nullptr, nullptr, nullptr};
-    int   correlation_map  = 0;                          // 0=u, 1=v, 2=s2n
-    float correlation_cmap_min[3] = {-2.0f, -2.0f, 0.0f};
-    float correlation_cmap_max[3] = { 2.0f,  2.0f,  2.0f};
+    std::vector<SDL_Texture*> correlation_textures = {nullptr, nullptr, nullptr, nullptr};
+    int   correlation_map  = 2;                          // 0=u, 1=v, 2=mag, 3=s2n
+    float correlation_cmap_min[4] = {-2.0f, -2.0f, -2.0f, 0.0f};
+    float correlation_cmap_max[4] = { 2.0f,  2.0f,  2.0f,  2.0f};
     
-    std::vector<SDL_Texture*> val_textures = {nullptr, nullptr, nullptr};
-    int   val_map  = 0;                          // 0=u, 1=v, 2=s2n
-    float val_cmap_min[3] = {-2.0f, -2.0f, 0.0f};
-    float val_cmap_max[3] = { 2.0f,  2.0f,  2.0f};
-
-    bool show_raw_displacements = false; ///< Display correlation/validation u,v maps in pixel units.
+    std::vector<SDL_Texture*> val_textures = {nullptr, nullptr, nullptr, nullptr};
+    int   val_map  = 2;                          // 0=u, 1=v, 2=mag, 3=s2n
+    float val_cmap_min[4] = {-2.0f, -2.0f, -2.0f, 0.0f};
+    float val_cmap_max[4] = { 2.0f,  2.0f,  2.0f,  2.0f};
     
     SDL_Texture* surf_texture = nullptr;
     float surf_cmap_min = -0.1f;

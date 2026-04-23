@@ -1,6 +1,7 @@
 #include <water/ui.h>
 #include <SDL3_image/SDL_image.h>
 #include <filesystem>
+#include <cmath>
 
 namespace
 {
@@ -16,7 +17,8 @@ SDL_Texture* LoadTextureFromPath(SDL_Renderer* renderer, const std::string& path
 UI::UI(Session& session, SDL_Renderer* renderer)
     : session(session), renderer(renderer)
 {
-    correlation_textures.resize(3);
+    correlation_textures.resize(4);
+    val_textures.resize(4);
 }
 
 void UI::SetRenderer(SDL_Renderer* renderer)
@@ -24,7 +26,10 @@ void UI::SetRenderer(SDL_Renderer* renderer)
     this->renderer = renderer;
 
     if(texture_bg) SDL_DestroyTexture(texture_bg);
-    texture_bg = LoadTextureFromPath(renderer, std::string(PROJECT_DIR) + "/rsc/background.png");
+
+    const char* base_path = SDL_GetBasePath();
+    texture_bg = LoadTextureFromPath(renderer, std::string(base_path ? base_path : "") + "rsc/background.png");
+
     if(texture_bg) SDL_SetTextureBlendMode(texture_bg, SDL_BLENDMODE_BLEND);
 }
 
@@ -157,39 +162,39 @@ void UI::DrawLoadPanel()
     if(load_controls_disabled) ImGui::EndDisabled();
 
     if(session.GetFlowCount() > 1)
-  {
-      ImGui::SeparatorText("Active Image");
-      int idx = session.GetActiveIndex();
+    {
+        ImGui::SeparatorText("Active Image");
+        int idx = session.GetActiveIndex();
 
-      if(session.IsRunning())
-          ImGui::BeginDisabled();
+        if(session.IsRunning())
+            ImGui::BeginDisabled();
 
-      if(ImGui::Button("< Prev") && idx > 0)
-      {
-          session.SetActiveIndex(idx - 1);
-          if(flow_tex) SDL_DestroyTexture(flow_tex);
-          flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
-          // Null textures so they rebuild for new active image
-          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
-          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
-          SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
-      }
-      ImGui::SameLine();
-      if(ImGui::Button("Next >") && idx < session.GetFlowCount() - 1)
-      {
-          session.SetActiveIndex(idx + 1);
-          if(flow_tex) SDL_DestroyTexture(flow_tex);
-          flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
-          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
-          for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
-          SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
-      }
-      ImGui::SameLine();
-      ImGui::Text("%d / %d", idx + 1, session.GetFlowCount());
+        if(ImGui::Button("< Prev") && idx > 0)
+        {
+            session.SetActiveIndex(idx - 1);
+            if(flow_tex) SDL_DestroyTexture(flow_tex);
+            flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
+            // Null textures so they rebuild for new active image
+            for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+            for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+            SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Next >") && idx < session.GetFlowCount() - 1)
+        {
+            session.SetActiveIndex(idx + 1);
+            if(flow_tex) SDL_DestroyTexture(flow_tex);
+            flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
+            for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+            for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+            SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+        }
+        ImGui::SameLine();
+        ImGui::Text("%d / %d", idx + 1, session.GetFlowCount());
 
-      if(session.IsRunning())
-          ImGui::EndDisabled();
-  }
+        if(session.IsRunning())
+            ImGui::EndDisabled();
+    }
 
     ImGui::End();
 }
@@ -266,7 +271,7 @@ void UI::DrawParametersPanel()
     else
         ImGui::TextDisabled("Mask zeros u and v outside the sample before FC integration.");
 
-    ImGui::Checkbox("Field Correction", &session.n_correction);
+    params_changed |= ImGui::Checkbox("Field Correction", &session.n_correction);
 
     ImGui::PushItemWidth(-230.0f);
     
@@ -301,8 +306,8 @@ void UI::DrawParametersPanel()
     {
         session.ScaleFields();
         // Null textures so Draw functions rebuild them next frame
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+        for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+        for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
         SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
     }
 }
@@ -567,12 +572,12 @@ void UI::DrawVisualizationPanel()
 {
     ImGui::Begin("Visualization");
 
-    bool previous_show_raw = show_raw_displacements;
-    ImGui::Checkbox("Show Correlation/Validation In Raw Pixels", &show_raw_displacements);
-    if(show_raw_displacements != previous_show_raw)
+    bool previous_show_raw = session.raw_displacements;
+    ImGui::Checkbox("Show Correlation/Validation In Raw Pixels", &session.raw_displacements);
+    if(session.raw_displacements != previous_show_raw)
     {
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+        for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+        for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
     }
 
     ImGui::End();
@@ -587,9 +592,9 @@ void UI::DrawVisualizationPanel()
     StageState cur_recon = session.GetStageState(STAGE_RECON);
 
     if(cur_correlation == Done && last_correlation != Done)
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+        for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
     if(cur_val == Done && last_val != Done)
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+        for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
     if(cur_recon == Done && last_recon != Done)
         { SDL_DestroyTexture(surf_texture); surf_texture = nullptr; }
 
@@ -609,17 +614,15 @@ void UI::DrawVisualizationPanel()
 
 void UI::RebuildCorrelationTextures()
 {
-    const VectorField& field = show_raw_displacements
-        ? session.GetRawCorrelationField()
-        : session.GetCorrelationField();
-    const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
+    const VectorField& field = session.GetCorrelationField();
+    const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.mag, &field.s2n};
     int w = field.width, h = field.height;
 
     // Build RGBA pixel buffer (temporary - SDL copies it)
     std::vector<uint8_t> pixels(w * h * 4);
 
     ImPlot::PushColormap(ImPlotColormap_Viridis);
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < correlation_textures.size(); i++)
     {
         float range = correlation_cmap_max[i] - correlation_cmap_min[i];
 
@@ -631,10 +634,21 @@ void UI::RebuildCorrelationTextures()
                 t = std::isfinite(t) ? std::clamp(t, 0.0f, 1.0f) : 0.0f;
                 ImVec4 col = ImPlot::SampleColormap(t);
                 int idx = (r * w + c) * 4;
-                pixels[idx+0] = (uint8_t)(col.x * 255);
-                pixels[idx+1] = (uint8_t)(col.y * 255);
-                pixels[idx+2] = (uint8_t)(col.z * 255);
-                pixels[idx+3] = 255;
+                
+                if(i == 2 && session.b_qthreshold && std::abs((*data[i])(r, c)) < session.qthreshold)
+                {
+                    pixels[idx+0] = (uint8_t)(255);
+                    pixels[idx+1] = (uint8_t)(255);
+                    pixels[idx+2] = (uint8_t)(255);
+                    pixels[idx+3] = 255;
+                }
+                else
+                {
+                    pixels[idx+0] = (uint8_t)(col.x * 255);
+                    pixels[idx+1] = (uint8_t)(col.y * 255);
+                    pixels[idx+2] = (uint8_t)(col.z * 255);
+                    pixels[idx+3] = 255;
+                }
             }
         }
 
@@ -652,18 +666,17 @@ void UI::DrawCorrelation()
 {
     ImGui::Begin("Correlation Results");
 
-    const VectorField& field = show_raw_displacements
-        ? session.GetRawCorrelationField()
-        : session.GetCorrelationField();
+    const VectorField& field = session.GetCorrelationField();
 
     // --- Rebuild textures if invalidated or colormap range changed ---
-    static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
-    static float data_min_cache[3] = {0,0,0}, data_max_cache[3] = {1,1,1};
+    static float last_min[4] = {0,0,0,0}, last_max[4] = {0,0,0,0};
+    static float data_min_cache[4] = {0,0,0,0}, data_max_cache[4] = {1,1,1,1};
+    static float qthreshold_last = 0;
     if(correlation_textures[0] == nullptr)
     {
         // Auto-range all three maps on first build
-        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
-        for(int i = 0; i < 3; i++)
+        const Eigen::MatrixXf* maps[4] = {&field.u, &field.v, &field.mag, &field.s2n};
+        for(int i = 0; i < correlation_textures.size(); i++)
         {
             correlation_cmap_min[i] = maps[i]->minCoeff();
             correlation_cmap_max[i] = maps[i]->maxCoeff();
@@ -672,12 +685,13 @@ void UI::DrawCorrelation()
         }
     }
     bool dirty = (correlation_textures[0] == nullptr);
-    for(int i = 0; i < 3; i++)
-        dirty |= (correlation_cmap_min[i] != last_min[i] || correlation_cmap_max[i] != last_max[i]);
+    for(int i = 0; i < correlation_textures.size(); i++)
+        dirty |= (correlation_cmap_min[i] != last_min[i] || correlation_cmap_max[i] != last_max[i] || qthreshold_last != session.qthreshold);
     if(dirty)
     {
         RebuildCorrelationTextures();
-        for(int i = 0; i < 3; i++) { last_min[i] = correlation_cmap_min[i]; last_max[i] = correlation_cmap_max[i]; }
+        for(int i = 0; i < correlation_textures.size(); i++) { last_min[i] = correlation_cmap_min[i]; last_max[i] = correlation_cmap_max[i]; }
+        qthreshold_last = session.qthreshold;
     }
 
     // --- Physical scale: correlation grid spacing -> mm ---
@@ -700,7 +714,8 @@ void UI::DrawCorrelation()
     // --- Map selection (mutually exclusive, no rebuild) ---
     ImGui::RadioButton("u",   &correlation_map, 0); ImGui::SameLine();
     ImGui::RadioButton("v",   &correlation_map, 1); ImGui::SameLine();
-    ImGui::RadioButton("s2n", &correlation_map, 2);
+    ImGui::RadioButton("mag",   &correlation_map, 2); ImGui::SameLine();
+    ImGui::RadioButton("s2n", &correlation_map, 3);
 
     // --- Heatmap plot ---
     if(ImPlot::BeginPlot("##correlationresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
@@ -715,11 +730,11 @@ void UI::DrawCorrelation()
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             int col = (int)((mouse.x + field_w_mm/2) / px_to_mm);
             int row = field.height - 1 - (int)((mouse.y + field_h_mm/2) / px_to_mm); // flip: plot y is bottom-up, matrix row is top-down
-            const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+            const Eigen::MatrixXf* maps[4] = {&field.u, &field.v, &field.mag, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
-                const char* unit = (correlation_map == 2) ? ""
-                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
+                const char* unit = (correlation_map == 3) ? ""
+                                 : session.raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
                 ImGui::SetTooltip("%.4e%s", (*maps[correlation_map])(row, col), unit);
             }
         }
@@ -757,6 +772,7 @@ void UI::DrawCorrelation()
             correlation_cmap_min[correlation_map] = data_min;
             correlation_cmap_max[correlation_map] = data_max;
         }
+        ImGui::SliderFloat("Quality Threshold", &session.qthreshold, 0.0f, 1e-3f, "%.5f");
     }
 
     ImGui::End();
@@ -764,17 +780,15 @@ void UI::DrawCorrelation()
 
 void UI::RebuildValTextures()
 {
-    const VectorField& field = show_raw_displacements
-        ? session.GetRawValField()
-        : session.GetValField();
-    const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.s2n};
+    const VectorField& field = session.GetValField();
+    const std::vector<const Eigen::MatrixXf*> data = {&field.u, &field.v, &field.mag, &field.s2n};
     int w = field.width, h = field.height;
 
     // Build RGBA pixel buffer (temporary - SDL copies it)
     std::vector<uint8_t> pixels(w * h * 4);
 
     ImPlot::PushColormap(ImPlotColormap_Viridis);
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < val_textures.size(); i++)
     {
         float range = val_cmap_max[i] - val_cmap_min[i];
 
@@ -786,10 +800,21 @@ void UI::RebuildValTextures()
                 t = std::isfinite(t) ? std::clamp(t, 0.0f, 1.0f) : 0.0f;
                 ImVec4 col = ImPlot::SampleColormap(t);
                 int idx = (r * w + c) * 4;
-                pixels[idx+0] = (uint8_t)(col.x * 255);
-                pixels[idx+1] = (uint8_t)(col.y * 255);
-                pixels[idx+2] = (uint8_t)(col.z * 255);
-                pixels[idx+3] = 255;
+
+                if(i == 2 && session.b_qthreshold && std::abs((*data[i])(r, c)) < session.qthreshold)
+                {
+                    pixels[idx+0] = (uint8_t)(255);
+                    pixels[idx+1] = (uint8_t)(255);
+                    pixels[idx+2] = (uint8_t)(255);
+                    pixels[idx+3] = 255;
+                }
+                else
+                {
+                    pixels[idx+0] = (uint8_t)(col.x * 255);
+                    pixels[idx+1] = (uint8_t)(col.y * 255);
+                    pixels[idx+2] = (uint8_t)(col.z * 255);
+                    pixels[idx+3] = 255;
+                }
             }
         }
 
@@ -807,25 +832,24 @@ void UI::DrawVal()
 {
     ImGui::Begin("Val Results");
 
-    const VectorField& field = show_raw_displacements
-        ? session.GetRawValField()
-        : session.GetValField();
+    const VectorField& field = session.GetValField();
 
     // --- Invalidate textures when Validation reruns ---
     static StageState last_val_state = Idle;
     StageState cur_val_state = session.GetStageState(STAGE_VAL);
     if(cur_val_state == Done && last_val_state != Done)
-        for(int i = 0; i < 3; i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+        for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
     last_val_state = cur_val_state;
 
     // --- Rebuild textures if invalidated or colormap range changed ---
-    static float last_min[3] = {0,0,0}, last_max[3] = {0,0,0};
-    static float data_min_cache[3] = {0,0,0}, data_max_cache[3] = {1,1,1};
+    static float last_min[4] = {0,0,0,0}, last_max[4] = {0,0,0,0};
+    static float data_min_cache[4] = {0,0,0,0}, data_max_cache[4] = {1,1,1,1};
+    static float qthreshold_last = 0;
     if(val_textures[0] == nullptr)
     {
         // Auto-range all three maps on first build
-        const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
-        for(int i = 0; i < 3; i++)
+        const Eigen::MatrixXf* maps[4] = {&field.u, &field.v, &field.mag, &field.s2n};
+        for(int i = 0; i < val_textures.size(); i++)
         {
             val_cmap_min[i] = maps[i]->minCoeff();
             val_cmap_max[i] = maps[i]->maxCoeff();
@@ -834,12 +858,13 @@ void UI::DrawVal()
         }
     }
     bool dirty = (val_textures[0] == nullptr);
-    for(int i = 0; i < 3; i++)
-        dirty |= (val_cmap_min[i] != last_min[i] || val_cmap_max[i] != last_max[i]);
+    for(int i = 0; i < val_textures.size(); i++)
+        dirty |= (val_cmap_min[i] != last_min[i] || val_cmap_max[i] != last_max[i] || qthreshold_last != session.qthreshold);
     if(dirty)
     {
         RebuildValTextures();
-        for(int i = 0; i < 3; i++) { last_min[i] = val_cmap_min[i]; last_max[i] = val_cmap_max[i]; }
+        for(int i = 0; i < val_textures.size(); i++) { last_min[i] = val_cmap_min[i]; last_max[i] = val_cmap_max[i]; }
+        qthreshold_last = session.qthreshold;
     }
 
     // --- Physical scale: Val cell spacing -> mm ---
@@ -862,7 +887,8 @@ void UI::DrawVal()
     // --- Map selection (mutually exclusive, no rebuild) ---
     ImGui::RadioButton("u",   &val_map, 0); ImGui::SameLine();
     ImGui::RadioButton("v",   &val_map, 1); ImGui::SameLine();
-    ImGui::RadioButton("s2n", &val_map, 2);
+    ImGui::RadioButton("mag",   &val_map, 2); ImGui::SameLine();
+    ImGui::RadioButton("s2n", &val_map, 3);
 
     // --- Heatmap plot ---
     if(ImPlot::BeginPlot("##valresults", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
@@ -877,11 +903,11 @@ void UI::DrawVal()
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             int col = (int)((mouse.x + field_w_mm/2) / px_to_mm);
             int row = field.height - 1 - (int)((mouse.y + field_h_mm/2) / px_to_mm);
-            const Eigen::MatrixXf* maps[3] = {&field.u, &field.v, &field.s2n};
+            const Eigen::MatrixXf* maps[4] = {&field.u, &field.v, &field.mag, &field.s2n};
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
-                const char* unit = (val_map == 2) ? ""
-                                 : show_raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
+                const char* unit = (val_map == 3) ? ""
+                                 : session.raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
                 ImGui::SetTooltip("%.4e%s", (*maps[val_map])(row, col), unit);
             }
         }
@@ -919,6 +945,7 @@ void UI::DrawVal()
             val_cmap_min[val_map] = data_min;
             val_cmap_max[val_map] = data_max;
         }
+        ImGui::SliderFloat("Quality Threshold", &session.qthreshold, 0.0f, 1e-3f, "%.5f");
     }
 
     ImGui::End();

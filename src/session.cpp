@@ -98,7 +98,6 @@ void Session::RunCorrelation()
     for(int i = 0; i < (int)flows.size(); i++)
         raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat());
 
-    ApplyRefractionCorrection();
     ScaleFields();
 
     stagestates[STAGE_CORRELATION] = Done;
@@ -143,7 +142,9 @@ void Session::RunReconstruction()
                                : GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height);
 
     for(int i = 0; i < (int)raw_val_field.size(); i++)
+    {
         raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
+    }
 
     ScaleFields();
 
@@ -191,7 +192,6 @@ void Session::RunCorrelationAsync()
 
         if(stop_requested) return;
 
-        ApplyRefractionCorrection();
         ScaleFields();
 
         progress = 1.0f;
@@ -323,7 +323,6 @@ void Session::RunAllAsync()
             full_pipeline_running = false;
             return;
         }
-        ApplyRefractionCorrection();
         ScaleFields();
         stage_progress[STAGE_CORRELATION] = 1.0f;
         full_progress = 1.0f / 3.0f;
@@ -409,8 +408,14 @@ void Session::ComputeRefractionCorrection(int h, int w)
     float t    = opticalparameters.t    * 1e-3f;
     float Z_B  = Z_a + Z_d;
     float z_i  = f * Z_B / (Z_B - f);
+
     int   step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
     float m1   = Z_a / z_i;
+
+    float img_cx = 0.5f * (ref.GetWidth()  - 1.0f);
+    float img_cy = 0.5f * (ref.GetHeight() - 1.0f);
+
+    float win_center = 0.5f * (correlatorparameters.window_size - 1.0f);
 
     correction[0] = Eigen::MatrixXf::Zero(h, w);
     correction[1] = Eigen::MatrixXf::Zero(h, w);
@@ -419,23 +424,24 @@ void Session::ComputeRefractionCorrection(int h, int w)
     {
         for(int col = 0; col < w; col++)
         {
-            float sx = (col - w / 2.0f) * step * P_px;
-            float sy = (row - h / 2.0f) * step * P_px;
+            float sx = (col * step + win_center - img_cx) * P_px;
+            float sy = (row * step + win_center - img_cy) * P_px;
 
             float rx = sx * m1;
             float ry = sy * m1;
 
-            float theta_x = atanf(rx / Z_a);
-            float theta_y = atanf(ry / Z_a);
+            float r = std::hypot(rx, ry);
 
-            float thetar_x = asinf(sinf(theta_x) / opticalparameters.n);
-            float thetar_y = asinf(sinf(theta_y) / opticalparameters.n);
+            float theta = atan2(r, Z_a);
 
-            float dx = sinf(theta_x - thetar_x) * t / cosf(thetar_x);
-            float dy = sinf(theta_y - thetar_y) * t / cosf(thetar_y);
+            float thetar = asin(std::sin(theta) / opticalparameters.n);
 
-            float dsx = dx / sinf((std::numbers::pi / 2) - theta_x);
-            float dsy = dy / sinf((std::numbers::pi / 2) - theta_y);
+            float d = std::sin(theta - thetar) * t / cosf(thetar);
+
+            float ds = d / std::cos(theta);
+
+            float dsx = (r > 0.0f) ? ds * (rx / r) : 0.0f;
+            float dsy = (r > 0.0f) ? ds * (ry / r) : 0.0f;
 
             correction[0](row, col) = dsx * z_i / (Z_B * P_px);
             correction[1](row, col) = dsy * z_i / (Z_B * P_px);
@@ -445,14 +451,28 @@ void Session::ComputeRefractionCorrection(int h, int w)
 
 void Session::ApplyRefractionCorrection()
 {
-    if(!n_correction || raw_correlation_field.empty()) return;
+    if(!n_correction || correlation_field.empty()) return;
 
-    ComputeRefractionCorrection(raw_correlation_field[0].height, raw_correlation_field[0].width);
+    ComputeRefractionCorrection(correlation_field[0].height, correlation_field[0].width);
 
-    for(auto& field : raw_correlation_field)
+    if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
     {
-        field.u -= correction[0];
-        field.v -= correction[1];
+        for(auto& field : correlation_field)
+        {
+            field.u -= correction[0];
+            field.v -= correction[1];
+            field.CalcMag();
+        }
+    }
+
+    if(GetStageState(STAGE_VAL) != Idle && GetStageState(STAGE_VAL) != Ready)
+    {
+        for(auto& field : val_field)
+        {
+            field.u -= correction[0];
+            field.v -= correction[1];
+            field.CalcMag();
+        }
     }
 }
 
@@ -472,25 +492,35 @@ Eigen::MatrixXf Session::GetReconstructionMask(int width, int height)
 
 Eigen::MatrixXf Session::ReconstructField(const Reconstruction& recon,
                                           const VectorField& field,
-                                          const Eigen::MatrixXf& recon_mask) const
+                                          const Eigen::MatrixXf& recon_mask)
 {
+    VectorField p_field = field;
+
+    if(n_correction)
+    {
+        ComputeRefractionCorrection(p_field.height, p_field.width);
+        p_field.u -= correction[0];
+        p_field.v -= correction[1];
+        p_field.CalcMag();
+    }
+
     ReconstructionSolver solver = reconstruction_solver.load();
     if(solver == RECON_FRANKOT_CHELLAPPA)
     {
         if(mask_apply
-        && recon_mask.rows() == field.height
-        && recon_mask.cols() == field.width)
+        && recon_mask.rows() == p_field.height
+        && recon_mask.cols() == p_field.width)
         {
-            VectorField masked = field;
-            masked.u = field.u.array() * recon_mask.array();
-            masked.v = field.v.array() * recon_mask.array();
+            VectorField masked = p_field;
+            masked.u = p_field.u.array() * recon_mask.array();
+            masked.v = p_field.v.array() * recon_mask.array();
             return recon.ComputeFC(masked);
         }
 
-        return recon.ComputeFC(field);
+        return recon.ComputeFC(p_field);
     }
 
-    return recon.Compute(field, recon_mask);
+    return recon.Compute(p_field, recon_mask);
 }
 
 void Session::ScaleFields()
@@ -516,7 +546,7 @@ void Session::ScaleFields()
     term = std::max(term, 0.001f);
 
     int step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
-    float scale =   P_px * 1e-3 * (Z_B - f) * n
+    float scale =   P_px * 1e-3 * (Z_B - f)
                     / (f * Z_d * term);
 
     float surf_fac = (float)step * P_px * 1e-3 * Z_a / z_i;
@@ -526,8 +556,9 @@ void Session::ScaleFields()
         correlation_field.resize(raw_correlation_field.size());
         for(int i = 0; i < (int)raw_correlation_field.size(); i++)
         {
-            correlation_field[i].u      = raw_correlation_field[i].u.array() * scale;
-            correlation_field[i].v      = raw_correlation_field[i].v.array() * scale;
+            correlation_field[i].u      = raw_correlation_field[i].u.array();
+            correlation_field[i].v      = raw_correlation_field[i].v.array();
+            correlation_field[i].mag      = raw_correlation_field[i].mag.array();
             correlation_field[i].s2n    = raw_correlation_field[i].s2n;
             correlation_field[i].width  = raw_correlation_field[i].width;
             correlation_field[i].height = raw_correlation_field[i].height;
@@ -539,8 +570,9 @@ void Session::ScaleFields()
         val_field.resize(raw_val_field.size());
         for(int i = 0; i < (int)raw_val_field.size(); i++)
         {
-            val_field[i].u      = raw_val_field[i].u.array() * scale;
-            val_field[i].v      = raw_val_field[i].v.array() * scale;
+            val_field[i].u      = raw_val_field[i].u.array();
+            val_field[i].v      = raw_val_field[i].v.array();
+            val_field[i].mag      = raw_val_field[i].mag.array();
             val_field[i].s2n    = raw_val_field[i].s2n;
             val_field[i].width  = raw_val_field[i].width;
             val_field[i].height = raw_val_field[i].height;
@@ -553,6 +585,34 @@ void Session::ScaleFields()
         for(int i = 0; i < (int)raw_surface.size(); i++)
             surface[i] = raw_surface[i].array() * scale * surf_fac;
     }
+
+    //Refraction correction is in pixel units, do before scaling
+    if(n_correction)
+        ApplyRefractionCorrection();
+
+    if(!raw_displacements)
+    {
+        if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
+        {
+            for(int i = 0; i < (int)correlation_field.size(); i++)
+            {
+                correlation_field[i].u      *= scale;
+                correlation_field[i].v      *= scale;
+                correlation_field[i].mag    *= scale;
+            }
+        }
+
+        if(GetStageState(STAGE_VAL) != Idle && GetStageState(STAGE_VAL) != Ready)
+        {
+            for(int i = 0; i < (int)val_field.size(); i++)
+            {
+                val_field[i].u      *= scale;
+                val_field[i].v      *= scale;
+                val_field[i].mag    *= scale;
+            }
+        }
+    }
+    
 }
 
  bool Session::IsSaving() const

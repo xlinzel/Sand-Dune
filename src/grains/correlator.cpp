@@ -103,9 +103,18 @@ VectorField Correlator::Compute(const Eigen::MatrixXf& reference, const Eigen::M
         return VectorField();
 
     if(enable_pid && pid_iterations > 0)
-        return ComputeWithPid(reference, flow, on_progress);
+    {
+        VectorField result = ComputeWithPid(reference, flow, on_progress);
+        result.CalcMag();
 
-    return ComputeSinglePass(reference, flow, nullptr, nullptr, on_progress);
+        return result;
+    }
+
+    //Calculate magnitude map
+    VectorField result = ComputeSinglePass(reference, flow, nullptr, nullptr, on_progress);
+    result.CalcMag();
+
+    return result;
 }
 
 /// @brief Execute one rigid or PID-warped correlation pass over the image grid.
@@ -266,7 +275,7 @@ VectorField Correlator::ComputeWithPid(const Eigen::MatrixXf& reference, const E
             p = std::clamp(p, 0.0f, 1.0f);
 
             float rigid_w = 1.0f;
-            float pid_w   = 2.92f;
+            float pid_w   = 1.0f;
             float total_w = rigid_w + pid_iterations * pid_w;
 
             float done_before = 0.0f;
@@ -433,47 +442,20 @@ Eigen::MatrixXf Correlator::CrossCorrelationFFT(const Eigen::Ref<const Eigen::Ma
 
     /// @brief Shift the inverse FFT output so zero displacement is centered.
     Eigen::MatrixXf ccmap_shifted(rows, cols);
-    int half_r = rows / 2;
-    int half_c = cols / 2;
-    ccmap_shifted.block(0, 0, half_r, half_c) = ccmap.block(half_r, half_c, half_r, half_c);
-    ccmap_shifted.block(half_r, half_c, half_r, half_c) = ccmap.block(0, 0, half_r, half_c);
-    ccmap_shifted.block(0,  half_c, half_r, half_c) = ccmap.block(half_r, 0, half_r, half_c);
-    ccmap_shifted.block(half_r,  0, half_r, half_c) = ccmap.block(0, half_c, half_r, half_c);
+    int shift_r = rows / 2;
+    int shift_c = cols / 2;
 
-    return ccmap_shifted;
-}
-
-Eigen::MatrixXf Correlator::CrossCorrelationSpatial(const Eigen::Ref<const Eigen::MatrixXf>& w_reference,
-                                             const Eigen::Ref<const Eigen::MatrixXf>& w_flow)
-{
-    Eigen::Vector2i ref_size(w_reference.rows(), w_reference.cols());
-    Eigen::Vector2i flow_size(w_flow.rows(), w_flow.cols());
-
-    Eigen::MatrixXf ccmap(flow_size(0) + ref_size(0) - 1, flow_size(1) + ref_size(1) - 1); //Cross correlation map
-
-    for(int row_offset = 0; row_offset < flow_size(0) + ref_size(0) - 1; row_offset++)
+    for (int r = 0; r < rows; ++r)
     {
-        for(int col_offset = 0; col_offset < flow_size(1) + ref_size(1) - 1; col_offset++)
+        for (int c = 0; c < cols; ++c)
         {
-            Eigen::MatrixXf ref_overlap = w_reference.block(
-                std::clamp(ref_size(0) - row_offset - 1, 0, ref_size(0)), 
-                std::clamp(ref_size(1) - col_offset - 1, 0, ref_size(1)),
-                std::min({row_offset + 1, ref_size(0), flow_size(0), ref_size(0) + flow_size(0) - 1 - row_offset}),
-                std::min({col_offset + 1, ref_size(1), flow_size(1), ref_size(1) + flow_size(1) - 1 - col_offset}));
-
-            Eigen::MatrixXf flow_overlap = w_flow.block(
-                std::clamp(row_offset - ref_size(0) + 1, 0, flow_size(0)),
-                std::clamp(col_offset - ref_size(1) + 1, 0, flow_size(1)),
-                std::min({row_offset + 1, ref_size(0), flow_size(0), ref_size(0) + flow_size(0) - 1 - row_offset}),
-                std::min({col_offset + 1, ref_size(1), flow_size(1), ref_size(1) + flow_size(1) - 1 - col_offset}));
-
-            float sum = (ref_overlap.array() * flow_overlap.array()).sum();
-
-            ccmap(row_offset, col_offset) = sum;
+            int rr = (r + shift_r) % rows;
+            int cc = (c + shift_c) % cols;
+            ccmap_shifted(rr, cc) = ccmap(r, c);
         }
     }
 
-    return ccmap;
+    return ccmap_shifted;
 }
 
 //////////////////////////////////////////////////////

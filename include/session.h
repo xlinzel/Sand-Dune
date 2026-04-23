@@ -220,6 +220,15 @@ public:
     ///@{
     bool n_correction  = true;  ///< Apply refraction correction to correlation results.
     bool b_ref         = true;  ///< Show refractive-index units (dn) when true; thickness (mm) when false.
+    bool raw_displacements = false; ///< Display correlation/validation u,v maps in pixel units.
+    ///@}
+
+    // -------------------------------------------------------------------------
+    /// @name Quality Thresholding
+    // -------------------------------------------------------------------------
+    ///@{
+    bool b_qthreshold  = true;  ///< Apply visualisation of quality regions on scaffold.
+    float qthreshold    = 1e-4f;  ///< Threshold valude for quality regions.
     ///@}
 
 private:
@@ -251,7 +260,7 @@ private:
     /// @brief Dispatch to the selected reconstruction back end.
     Eigen::MatrixXf ReconstructField(const Reconstruction& recon,
                                      const VectorField& field,
-                                     const Eigen::MatrixXf& recon_mask) const;
+                                     const Eigen::MatrixXf& recon_mask);
 
     ///@}
 

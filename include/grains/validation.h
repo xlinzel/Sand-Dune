@@ -25,8 +25,22 @@ public:
                                   const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic>& mask) const;
 
     /// @brief Compute a boolean validity mask for @p data without modifying it.
+    /// @param data Raw correlation vector field.
     /// @return Per-vector boolean array; true = valid, false = outlier.
     const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic> Validate(const VectorField& data) const;
+
+    /// @brief Evaluate the UNO outlier criterion for one vector using a prepared neighbourhood.
+    /// @param i Row index of the candidate vector.
+    /// @param j Column index of the candidate vector.
+    /// @param data Source vector field being tested.
+    /// @param u_n Sorted u-component neighbourhood values around (i, j).
+    /// @param v_n Sorted v-component neighbourhood values around (i, j).
+    /// @param n Number of valid neighbourhood entries stored in @p u_n and @p v_n.
+    /// @param u_med Median u-component neighbourhood value.
+    /// @param v_med Median v-component neighbourhood value.
+    /// @return True when the combined normalized residual exceeds @ref nrm_threshold.
+    bool OutlierComp(int i, int j, const VectorField& data, std::array<float, 8>& u_n, std::array<float, 8>& v_n,
+                    int n,  float u_med, float v_med) const;
 
 private:
     float s2n_threshold = 1.3f; ///< Minimum acceptable signal-to-noise ratio.

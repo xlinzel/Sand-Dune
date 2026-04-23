@@ -502,7 +502,7 @@ implemented in \cls{Session}\allowbreak\code{::ScaleFields()}. Combining
 Equations~\eqref{eq:deflection} and~\eqref{eq:imgshift} gives
 \begin{equation}
   u_{px} = \frac{\Delta x_{\mathrm{img}}}{P_{px}}
-         = \frac{t}{n}\,\frac{\partial n}{\partial x}\,
+         = t\,\frac{\partial n}{\partial x}\,
            \frac{Z_d}{P_{px}}\frac{z_i}{Z_B},
 \end{equation}
 where, for readability in the equations below, $P_{px}$ is interpreted in
@@ -520,12 +520,12 @@ the RI-variation inversion becomes
   =
   u_{px}\,
   P_{px}\,
-  \frac{n\,(Z_B - f)}{f\,Z_d\,t}.
+  \frac{(Z_B - f)}{f\,Z_d\,t}.
 \end{equation}
 The code therefore applies the correlation-map scale factor
 \begin{equation}
   S_{\mathrm{corr}} =
-    P_{px}\,\frac{n\,(Z_B - f)}{f\,Z_d\,t},
+    P_{px}\,\frac{(Z_B - f)}{f\,Z_d\,t},
   \label{eq:scorr_dn}
 \end{equation}
 so that
@@ -537,7 +537,7 @@ For thickness-variation mode, the implemented model replaces $t$ with
 $(n-1)$:
 \begin{equation}
   S_{\mathrm{corr}} =
-    P_{px}\,\frac{n\,(Z_B - f)}{f\,Z_d\,(n-1)}.
+    P_{px}\,\frac{(Z_B - f)}{f\,Z_d\,(n-1)}.
   \label{eq:scorr_mm}
 \end{equation}
 

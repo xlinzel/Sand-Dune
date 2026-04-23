@@ -15,8 +15,8 @@ struct OpticalParameters
     float f    = 25.0f;  ///< Lens focal length (mm).
 
     // --- Setup geometry ---
-    float Z_d = 220.0f; ///< Distance from background dot pattern to the sample (mm).
-    float Z_a = 54.5f;  ///< Distance from the sample to the lens front principal plane (mm).
+    float Z_d = 218.0f; ///< Distance from background dot pattern to the sample (mm).
+    float Z_a = 45.0f;  ///< Distance from the sample to the lens front principal plane (mm).
 
     // --- Sensitivity / resolution helpers ---
     float d_a  = 10.5f; ///< Lens aperture diameter (mm). Used for depth-of-field estimates.

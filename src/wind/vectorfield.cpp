@@ -7,7 +7,19 @@ VectorField::VectorField(const int rows, const int cols)
 {
     u = Eigen::MatrixXf::Zero(height, width);
     v = Eigen::MatrixXf::Zero(height, width);
+    mag = Eigen::MatrixXf::Zero(height, width);
     s2n = Eigen::MatrixXf::Zero(height, width);
+}
+
+void VectorField::CalcMag()
+{
+    if(u.size() !=  v.size())
+        return;
+
+    for(int i = 0; i < u.size(); i++)
+    {
+        mag.data()[i] = sqrt(u.data()[i] * u.data()[i] + v.data()[i] * v.data()[i]);
+    }
 }
 
 void VectorField::SaveCSV(const std::string& path) const

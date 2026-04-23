@@ -31,10 +31,22 @@ else()
 endif()
 
 # Core library
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
-list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cpp$")
-
-add_library(dune_core ${SOURCES})
+add_library(dune_core)
+target_sources(dune_core PRIVATE
+    src/session.cpp
+    src/grains/correlator-cmm.cpp
+    src/grains/correlator-pid.cpp
+    src/grains/correlator.cpp
+    src/grains/reconstruction.cpp
+    src/grains/validation.cpp
+    src/sun/colormap.cpp
+    src/sun/image.cpp
+    src/sun/mask.cpp
+    src/sun/lib/stb.cpp
+    src/water/app.cpp
+    src/water/ui.cpp
+    src/wind/vectorfield.cpp
+)
 target_include_directories(dune_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(DEFINED FFTW3_INCLUDE_DIRS)
@@ -61,16 +73,15 @@ endif()
 # Main executable
 add_executable(sand_dune src/main.cpp)
 target_link_libraries(sand_dune PRIVATE dune_core)
+add_custom_command(TARGET sand_dune POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/rsc
+        $<TARGET_FILE_DIR:sand_dune>/rsc
+    COMMENT "Copying runtime resources"
+)
 
 # Tests
-file(GLOB TEST_SOURCES "tests/*.cpp")
-add_executable(run_tests ${TEST_SOURCES})
+add_executable(run_tests
+    tests/test.cpp
+)
 target_link_libraries(run_tests PRIVATE dune_core)
-
-target_compile_definitions(run_tests PRIVATE 
-    PROJECT_DIR="${CMAKE_SOURCE_DIR}"
-)
-
-target_compile_definitions(dune_core PRIVATE 
-    PROJECT_DIR="${CMAKE_SOURCE_DIR}"
-)

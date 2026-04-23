@@ -4,6 +4,8 @@ build-x64/
 .vscode/
 csv/
 bos_pattern/
+imgui.ini
+window.ini
 
 # Doxygen generated output
 docs/output/
