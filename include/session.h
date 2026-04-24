@@ -47,6 +47,24 @@ enum ReconstructionSolver
     RECON_FRANKOT_CHELLAPPA  ///< FFT-based Frankot-Chellappa integration.
 };
 
+struct BatchGroup
+{
+    std::string ref_path;
+    Image ref;
+
+    std::vector<std::string> flow_paths;
+    std::vector<Image> flows;
+
+    std::vector<VectorField> raw_correlation_field;
+    std::vector<VectorField> correlation_field;
+
+    std::vector<VectorField> raw_val_field;
+    std::vector<VectorField> val_field;
+
+    std::vector<Eigen::MatrixXf> raw_surface;
+    std::vector<Eigen::MatrixXf> surface;
+};
+
 /// @brief Top-level controller for the BOS surface reconstruction pipeline.
 ///
 /// Manages image loading, the three-stage processing pipeline (Correlation -> Validation -> Reconstruction),
@@ -89,6 +107,9 @@ public:
     /// @brief Load one or more disturbed flow images for batch processing.
     /// @param paths Ordered list of image file paths.
     void LoadFlow(const std::vector<std::string>& paths);
+
+    void AddGroup(); ///< Append an empty reference/flow group and select it.
+    void DeleteActiveGroup(); ///< Remove the active group and keep selection valid.
 
     ///@}
 
@@ -167,6 +188,13 @@ public:
 
     const std::string& GetRefPath()  const; ///< File path of the reference image.
     const std::string& GetFlowPath() const; ///< File path of the active flow image.
+
+    int GetGroupCount() const; ///< Number of reference/flow groups.
+    int GetActiveGroupIndex() const; ///< Active reference-group index.
+    int GetActiveFlowIndex() const;  ///< Active flow index within the active group.
+    void SetActiveGroupIndex(int i); ///< Select the active reference group.
+    void SetActiveFlowIndex(int i);  ///< Select the active flow within the active group.
+    void SetActiveSelection(int group_i, int flow_i); ///< Select both active group and flow together.
 
     void SetActiveIndex(int i); ///< Select which batch frame to display.
     int  GetActiveIndex() const;
@@ -251,11 +279,10 @@ public:
     ///@}
 
 private:
-    std::string ref_path;
-    std::vector<std::string> flow_paths;
-    std::atomic<int> batch_index{0};
-    Image ref;
-    std::vector<Image> flows;
+    std::vector<BatchGroup> groups;
+    int active_group_index = 0;
+    int active_flow_index = 0;
+
     Mask mask;
 
     // -------------------------------------------------------------------------
@@ -268,10 +295,10 @@ private:
     /// Calculates the lateral ray displacement caused by refraction through a sample of known
     /// thickness (@p OpticalParameters::t) and refractive index (@p OpticalParameters::n),
     /// then maps that displacement onto the correlation grid in pixel units.
-    void ComputeRefractionCorrection(const ParamsSnapshot& params, int h, int w);
+    void ComputeRefractionCorrection(const ParamsSnapshot& params, int ref_width, int ref_height, int h, int w);
 
-    /// @brief Subtract the pre-computed correction matrices from all raw_correlation_field entries.
-    void ApplyRefractionCorrection(const ParamsSnapshot& params);
+    /// @brief Subtract the pre-computed correction matrices from the group's display fields.
+    void ApplyRefractionCorrection(const ParamsSnapshot& params, BatchGroup& group);
 
     /// @brief Build the active reconstruction mask in correlation-grid coordinates.
     Eigen::MatrixXf GetReconstructionMask(const ParamsSnapshot& params, int width, int height);
@@ -280,23 +307,13 @@ private:
     Eigen::MatrixXf ReconstructField(const Reconstruction& recon,
                                      const VectorField& field,
                                      const Eigen::MatrixXf& recon_mask,
-                                     const ParamsSnapshot& params);
+                                     const ParamsSnapshot& params,
+                                     int ref_width, int ref_height);
 
     void ScaleFields(const ParamsSnapshot& params);
 
     ///@}
-
-    std::vector<VectorField> raw_correlation_field; ///< Per-frame correlation fields in pixel units after optional correction.
-    std::vector<VectorField> correlation_field;     ///< Per-frame correlation fields in displayed gradient units.
     Eigen::MatrixXf correction[2];                  ///< Refraction correction matrices for u [0] and v [1], stored in pixel units.
-
-    std::vector<VectorField> raw_val_field; ///< Per-frame validated fields in pixel units after optional correction.
-    std::vector<VectorField> val_field;     ///< Per-frame validated fields in displayed gradient units.
-
-    std::vector<Eigen::MatrixXf> raw_surface; ///< Per-frame reconstructed surfaces in grid-integrated raw units.
-    std::vector<Eigen::MatrixXf> surface;     ///< Per-frame surfaces in final display units (dn or mm).
-
-    int active_index = 0;
 
     std::atomic<StageState> stagestates[STAGE_TOTAL];
     std::atomic<ReconstructionSolver> reconstruction_solver{RECON_POISSON};

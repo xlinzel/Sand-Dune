@@ -1,5 +1,6 @@
 #include <session.h>
 #include <algorithm>
+#include <filesystem>
 
 namespace
 {
@@ -14,10 +15,66 @@ float EstimateEtaSeconds(const std::chrono::steady_clock::time_point& start, flo
 
     return elapsed / progress * (1.0f - progress);
 }
+
+int TotalFlowCount(const std::vector<BatchGroup>& groups)
+{
+    int total = 0;
+    for(const auto& group : groups)
+        total += static_cast<int>(group.flows.size());
+    return total;
+}
+
+bool GroupHasLoadedFlows(const BatchGroup& group)
+{
+    return !group.flows.empty()
+        && std::all_of(group.flows.begin(), group.flows.end(), [](const Image& image)
+           {
+               return image.GetLoaded();
+           });
+}
+
+bool AllGroupsReadyForCorrelation(const std::vector<BatchGroup>& groups)
+{
+    if(groups.empty())
+        return false;
+
+    return std::all_of(groups.begin(), groups.end(), [](const BatchGroup& group)
+    {
+        return group.ref.GetLoaded() && GroupHasLoadedFlows(group);
+    });
+}
+
+std::string BuildFlowNamedPath(const std::string& base_path, const std::string& flow_path,
+                               const std::string& stage_suffix, int group_index, int flow_index)
+{
+    namespace fs = std::filesystem;
+
+    fs::path base(base_path);
+    fs::path directory = base.has_filename() ? base.parent_path() : base;
+
+    std::string ui_name = base.has_filename()
+        ? (base.has_extension() ? base.stem().string() : base.filename().string())
+        : std::string{};
+
+    std::string flow_name = fs::path(flow_path).stem().string();
+    if(flow_name.empty())
+        flow_name = "flow";
+
+    std::string filename = ui_name.empty()
+        ? flow_name
+        : ui_name + "_" + flow_name;
+
+    filename += "_g" + std::to_string(group_index);
+    filename += "_f" + std::to_string(flow_index);
+    filename += "_" + stage_suffix + ".csv";
+
+    return (directory / filename).string();
+}
 }
 
 Session::Session()
 {
+    groups.resize(1);
     stagestates[STAGE_CORRELATION].store(Idle);
     stagestates[STAGE_VAL].store(Idle);
     stagestates[STAGE_RECON].store(Idle);
@@ -39,49 +96,113 @@ Session::~Session()
 
 void Session::LoadRef(const std::string& path)
 {
-    ref_path = path;
-    ref.Load(path.c_str());
+    if(groups.empty())
+        groups.resize(1);
 
-    if(ref.GetLoaded() && HasFlow())
-    {
+    BatchGroup& group = groups[active_group_index];
+    group.ref_path = path;
+    group.ref.Load(path.c_str());
+    group.raw_correlation_field.clear();
+    group.correlation_field.clear();
+    group.raw_val_field.clear();
+    group.val_field.clear();
+    group.raw_surface.clear();
+    group.surface.clear();
+
+    if(AllGroupsReadyForCorrelation(groups))
         stagestates[STAGE_CORRELATION] = Ready;
-    }
+    else
+        stagestates[STAGE_CORRELATION] = Idle;
+    stagestates[STAGE_VAL] = Idle;
+    stagestates[STAGE_RECON] = Idle;
 
     std::lock_guard<std::mutex> lock(params_mutex);
-    posx = GetRef().GetWidth() / 2;
-    posy = GetRef().GetHeight() / 2;
+    posx = group.ref.GetWidth() / 2;
+    posy = group.ref.GetHeight() / 2;
 }
 
 void Session::LoadFlow(const std::vector<std::string>& paths)
 {
-    flow_paths = paths;
-    flows.clear();
-    flows.resize(paths.size());
+    if(groups.empty())
+        groups.resize(1);
+
+    BatchGroup& group = groups[active_group_index];
+    group.flow_paths = paths;
+    group.flows.clear();
+    group.flows.resize(paths.size());
 
     // Reset pipeline
     stagestates[STAGE_CORRELATION] = Idle;
     stagestates[STAGE_VAL]   = Idle;
     stagestates[STAGE_RECON] = Idle;
-    raw_correlation_field.clear(); correlation_field.clear();
-    raw_val_field.clear(); val_field.clear();
-    raw_surface.clear();   surface.clear();
-    active_index = 0;
+    group.raw_correlation_field.clear(); group.correlation_field.clear();
+    group.raw_val_field.clear(); group.val_field.clear();
+    group.raw_surface.clear();   group.surface.clear();
+    active_flow_index = 0;
 
     for(int i = 0; i < static_cast<int>(paths.size()); i++)
-        flows[i].Load(paths[i].c_str());
+        group.flows[i].Load(paths[i].c_str());
 
-    bool all_loaded = !flows.empty()
-                   && std::all_of(flows.begin(), flows.end(), [](const Image& image)
-                      {
-                          return image.GetLoaded();
-                      });
-
-    if(ref.GetLoaded() && all_loaded)
-    {
+    if(AllGroupsReadyForCorrelation(groups))
         stagestates[STAGE_CORRELATION] = Ready;
+    else
+        stagestates[STAGE_CORRELATION] = Idle;
+    if(group.ref.GetLoaded() && GroupHasLoadedFlows(group))
+    {
         std::lock_guard<std::mutex> lock(params_mutex);
-        posx = flows[0].GetWidth()  / 2;
-        posy = flows[0].GetHeight() / 2;
+        posx = group.flows[0].GetWidth()  / 2;
+        posy = group.flows[0].GetHeight() / 2;
+    }
+}
+
+void Session::AddGroup()
+{
+    groups.emplace_back();
+    active_group_index = static_cast<int>(groups.size()) - 1;
+    active_flow_index = 0;
+    stagestates[STAGE_CORRELATION] = Idle;
+    stagestates[STAGE_VAL] = Idle;
+    stagestates[STAGE_RECON] = Idle;
+}
+
+void Session::DeleteActiveGroup()
+{
+    if(groups.empty())
+    {
+        groups.emplace_back();
+        active_group_index = 0;
+        active_flow_index = 0;
+    }
+    else if(groups.size() == 1)
+    {
+        groups[0] = BatchGroup{};
+        active_group_index = 0;
+        active_flow_index = 0;
+    }
+    else
+    {
+        groups.erase(groups.begin() + active_group_index);
+        active_group_index = std::clamp(active_group_index, 0, static_cast<int>(groups.size()) - 1);
+        const auto& group = groups[active_group_index];
+        active_flow_index = group.flows.empty()
+            ? 0
+            : std::clamp(active_flow_index, 0, static_cast<int>(group.flows.size()) - 1);
+    }
+
+    stagestates[STAGE_CORRELATION] = AllGroupsReadyForCorrelation(groups) ? Ready : Idle;
+    stagestates[STAGE_VAL] = Idle;
+    stagestates[STAGE_RECON] = Idle;
+
+    std::lock_guard<std::mutex> lock(params_mutex);
+    if(!groups.empty() && groups[active_group_index].ref.GetLoaded())
+    {
+        posx = groups[active_group_index].ref.GetWidth() / 2;
+        posy = groups[active_group_index].ref.GetHeight() / 2;
+    }
+    else
+    {
+        posx = 0;
+        posy = 0;
     }
 }
 
@@ -97,10 +218,12 @@ void Session::RunCorrelation()
     if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
     Correlator correlator(params.correlatorparameters);
-    raw_correlation_field.resize(flows.size());
-
-    for(int i = 0; i < (int)flows.size(); i++)
-        raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat());
+    for(auto& group : groups)
+    {
+        group.raw_correlation_field.resize(group.flows.size());
+        for(int i = 0; i < static_cast<int>(group.flows.size()); i++)
+            group.raw_correlation_field[i] = correlator.Compute(group.ref.GetMat(), group.flows[i].GetMat());
+    }
 
     ScaleFields(params);
 
@@ -119,11 +242,11 @@ void Session::RunValidation()
     if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
     Validation post;
-    raw_val_field.resize(raw_correlation_field.size());
-
-    for(int i = 0; i < (int)raw_correlation_field.size(); i++)
+    for(auto& group : groups)
     {
-        raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
+        group.raw_val_field.resize(group.raw_correlation_field.size());
+        for(int i = 0; i < static_cast<int>(group.raw_correlation_field.size()); i++)
+            group.raw_val_field[i] = post.PostProcess(group.raw_correlation_field[i]);
     }
 
     ScaleFields(params);
@@ -142,16 +265,20 @@ void Session::RunReconstruction()
     stagestates[STAGE_RECON] = Busy;
 
     Reconstruction recon;
-    raw_surface.resize(raw_val_field.size());
-    surface.resize(raw_val_field.size());
-
-    Eigen::MatrixXf recon_mask = raw_val_field.empty()
-                               ? Eigen::MatrixXf()
-                               : GetReconstructionMask(params, raw_val_field[0].width, raw_val_field[0].height);
-
-    for(int i = 0; i < (int)raw_val_field.size(); i++)
+    for(auto& group : groups)
     {
-        raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask, params);
+        group.raw_surface.resize(group.raw_val_field.size());
+        group.surface.resize(group.raw_val_field.size());
+
+        Eigen::MatrixXf recon_mask = group.raw_val_field.empty()
+                                   ? Eigen::MatrixXf()
+                                   : GetReconstructionMask(params, group.raw_val_field[0].width, group.raw_val_field[0].height);
+
+        for(int i = 0; i < static_cast<int>(group.raw_val_field.size()); i++)
+        {
+            group.raw_surface[i] = ReconstructField(recon, group.raw_val_field[i], recon_mask, params,
+                                                    group.ref.GetWidth(), group.ref.GetHeight());
+        }
     }
 
     ScaleFields(params);
@@ -218,18 +345,24 @@ void Session::RunCorrelationAsync()
     activetask = std::async(std::launch::async, [this, params]()
     {
         Correlator correlator(params.correlatorparameters);
-        int n = (int)flows.size();
-        raw_correlation_field.resize(n);
+        int total = std::max(1, TotalFlowCount(groups));
+        int completed = 0;
 
-        for(int i = 0; i < n; i++)
+        for(auto& group : groups)
         {
-            raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat(),
-                [this, i, n](float p)
+            group.raw_correlation_field.resize(group.flows.size());
+            for(int i = 0; i < static_cast<int>(group.flows.size()); i++)
+            {
+                int completed_before = completed;
+                group.raw_correlation_field[i] = correlator.Compute(group.ref.GetMat(), group.flows[i].GetMat(),
+                [this, completed_before, total](float p)
                 {
-                    float stage_p = (i + p) / n;
+                    float stage_p = (completed_before + p) / total;
                     progress = stage_p;
                     stage_progress[STAGE_CORRELATION] = stage_p;
                 });
+                completed++;
+            }
         }
 
         if(stop_requested) return;
@@ -263,14 +396,20 @@ void Session::RunValidationAsync()
     activetask = std::async(std::launch::async, [this, params]()
     {
         Validation post;
-        raw_val_field.resize(raw_correlation_field.size());
+        int total = std::max(1, TotalFlowCount(groups));
+        int completed = 0;
 
-        for(int i = 0; i < (int)raw_correlation_field.size(); i++)
+        for(auto& group : groups)
         {
-            raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
-            float stage_p = (float)(i + 1) / raw_correlation_field.size();
-            progress = stage_p;
-            stage_progress[STAGE_VAL] = stage_p;
+            group.raw_val_field.resize(group.raw_correlation_field.size());
+            for(int i = 0; i < static_cast<int>(group.raw_correlation_field.size()); i++)
+            {
+                group.raw_val_field[i] = post.PostProcess(group.raw_correlation_field[i]);
+                completed++;
+                float stage_p = static_cast<float>(completed) / total;
+                progress = stage_p;
+                stage_progress[STAGE_VAL] = stage_p;
+            }
         }
 
         ScaleFields(params);
@@ -302,19 +441,27 @@ void Session::RunReconstructionAsync()
     activetask = std::async(std::launch::async, [this, params]()
     {
         Reconstruction recon;
-        int n = (int)raw_val_field.size();
-        raw_surface.resize(n);
-        Eigen::MatrixXf recon_mask = (n > 0)
-                                   ? GetReconstructionMask(params, raw_val_field[0].width, raw_val_field[0].height)
-                                   : Eigen::MatrixXf();
+        int total = std::max(1, TotalFlowCount(groups));
+        int completed = 0;
 
-        for(int i = 0; i < n; i++)
+        for(auto& group : groups)
         {
-            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask, params);
+            int n = static_cast<int>(group.raw_val_field.size());
+            group.raw_surface.resize(n);
+            Eigen::MatrixXf recon_mask = (n > 0)
+                                       ? GetReconstructionMask(params, group.raw_val_field[0].width, group.raw_val_field[0].height)
+                                       : Eigen::MatrixXf();
 
-            float stage_p = (float)(i + 1) / n;
-            progress = stage_p;
-            stage_progress[STAGE_RECON] = stage_p;
+            for(int i = 0; i < n; i++)
+            {
+                group.raw_surface[i] = ReconstructField(recon, group.raw_val_field[i], recon_mask, params,
+                                                        group.ref.GetWidth(), group.ref.GetHeight());
+
+                completed++;
+                float stage_p = static_cast<float>(completed) / total;
+                progress = stage_p;
+                stage_progress[STAGE_RECON] = stage_p;
+            }
         }
 
         ScaleFields(params);
@@ -348,22 +495,27 @@ void Session::RunAllAsync()
 
     activetask = std::async(std::launch::async, [this, params]()
     {
-        int n = (int)flows.size();
+        int total = std::max(1, TotalFlowCount(groups));
+        int completed = 0;
 
         // --- Correlation ---
         Correlator correlator(params.correlatorparameters);
-        raw_correlation_field.resize(n);
-
-        for(int i = 0; i < n && !stop_requested; i++)
+        for(auto& group : groups)
         {
-            raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat(),
-                [this, i, n](float p)
+            group.raw_correlation_field.resize(group.flows.size());
+            for(int i = 0; i < static_cast<int>(group.flows.size()) && !stop_requested; i++)
+            {
+                int completed_before = completed;
+                group.raw_correlation_field[i] = correlator.Compute(group.ref.GetMat(), group.flows[i].GetMat(),
+                [this, completed_before, total](float p)
                 {
-                    float stage_p = (i + p) / n;
+                    float stage_p = (completed_before + p) / total;
                     progress = stage_p;
                     stage_progress[STAGE_CORRELATION] = stage_p;
                     full_progress = stage_p / 3.0f;
                 });
+                completed++;
+            }
         }
 
         if(stop_requested)
@@ -383,14 +535,19 @@ void Session::RunAllAsync()
 
         // --- Validation ---
         Validation post;
-        raw_val_field.resize(n);
-        for(int i = 0; i < n && !stop_requested; i++)
+        completed = 0;
+        for(auto& group : groups)
         {
-            raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
-            float stage_p = (float)(i + 1) / n;
-            progress = stage_p;
-            stage_progress[STAGE_VAL] = stage_p;
-            full_progress = (1.0f + stage_p) / 3.0f;
+            group.raw_val_field.resize(group.raw_correlation_field.size());
+            for(int i = 0; i < static_cast<int>(group.raw_correlation_field.size()) && !stop_requested; i++)
+            {
+                group.raw_val_field[i] = post.PostProcess(group.raw_correlation_field[i]);
+                completed++;
+                float stage_p = static_cast<float>(completed) / total;
+                progress = stage_p;
+                stage_progress[STAGE_VAL] = stage_p;
+                full_progress = (1.0f + stage_p) / 3.0f;
+            }
         }
 
         if(stop_requested)
@@ -412,24 +569,32 @@ void Session::RunAllAsync()
         }
 
         Reconstruction recon;
-        raw_surface.resize(n);
-        Eigen::MatrixXf recon_mask = (n > 0)
-                                   ? GetReconstructionMask(params, raw_val_field[0].width, raw_val_field[0].height)
-                                   : Eigen::MatrixXf();
+        completed = 0;
 
         task_start = std::chrono::steady_clock::now();
         stage_start[STAGE_RECON] = task_start;
         progress = 0.0f;
         stage_progress[STAGE_RECON] = 0.0f;
 
-        for(int i = 0; i < n && !stop_requested; i++)
+        for(auto& group : groups)
         {
-            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask, params);
+            int n = static_cast<int>(group.raw_val_field.size());
+            group.raw_surface.resize(n);
+            Eigen::MatrixXf recon_mask = (n > 0)
+                                       ? GetReconstructionMask(params, group.raw_val_field[0].width, group.raw_val_field[0].height)
+                                       : Eigen::MatrixXf();
 
-            float stage_p = (float)(i + 1) / n;
-            progress = stage_p;
-            stage_progress[STAGE_RECON] = stage_p;
-            full_progress = (2.0f + stage_p) / 3.0f;
+            for(int i = 0; i < n && !stop_requested; i++)
+            {
+                group.raw_surface[i] = ReconstructField(recon, group.raw_val_field[i], recon_mask, params,
+                                                        group.ref.GetWidth(), group.ref.GetHeight());
+
+                completed++;
+                float stage_p = static_cast<float>(completed) / total;
+                progress = stage_p;
+                stage_progress[STAGE_RECON] = stage_p;
+                full_progress = (2.0f + stage_p) / 3.0f;
+            }
         }
 
         if(stop_requested)
@@ -447,7 +612,7 @@ void Session::RunAllAsync()
     });
 }
 
-void Session::ComputeRefractionCorrection(const ParamsSnapshot& params, int h, int w)
+void Session::ComputeRefractionCorrection(const ParamsSnapshot& params, int ref_width, int ref_height, int h, int w)
 {
     float f    = params.opticalparameters.f    * 1e-3f;
     float Z_a  = params.opticalparameters.Z_a  * 1e-3f;
@@ -460,8 +625,8 @@ void Session::ComputeRefractionCorrection(const ParamsSnapshot& params, int h, i
     int   step = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap);
     float m1   = Z_a / z_i;
 
-    float img_cx = 0.5f * (ref.GetWidth()  - 1.0f);
-    float img_cy = 0.5f * (ref.GetHeight() - 1.0f);
+    float img_cx = 0.5f * (ref_width  - 1.0f);
+    float img_cy = 0.5f * (ref_height - 1.0f);
 
     float win_center = 0.5f * (params.correlatorparameters.window_size - 1.0f);
 
@@ -497,15 +662,16 @@ void Session::ComputeRefractionCorrection(const ParamsSnapshot& params, int h, i
     }
 }
 
-void Session::ApplyRefractionCorrection(const ParamsSnapshot& params)
+void Session::ApplyRefractionCorrection(const ParamsSnapshot& params, BatchGroup& group)
 {
-    if(!params.n_correction || correlation_field.empty()) return;
+    if(!params.n_correction || group.correlation_field.empty()) return;
 
-    ComputeRefractionCorrection(params, correlation_field[0].height, correlation_field[0].width);
+    ComputeRefractionCorrection(params, group.ref.GetWidth(), group.ref.GetHeight(),
+                                group.correlation_field[0].height, group.correlation_field[0].width);
 
     if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
     {
-        for(auto& field : correlation_field)
+        for(auto& field : group.correlation_field)
         {
             field.u -= correction[0];
             field.v -= correction[1];
@@ -515,7 +681,7 @@ void Session::ApplyRefractionCorrection(const ParamsSnapshot& params)
 
     if(GetStageState(STAGE_VAL) != Idle && GetStageState(STAGE_VAL) != Ready)
     {
-        for(auto& field : val_field)
+        for(auto& field : group.val_field)
         {
             field.u -= correction[0];
             field.v -= correction[1];
@@ -541,13 +707,14 @@ Eigen::MatrixXf Session::GetReconstructionMask(const ParamsSnapshot& params, int
 Eigen::MatrixXf Session::ReconstructField(const Reconstruction& recon,
                                           const VectorField& field,
                                           const Eigen::MatrixXf& recon_mask,
-                                          const ParamsSnapshot& params)
+                                          const ParamsSnapshot& params,
+                                          int ref_width, int ref_height)
 {
     VectorField p_field = field;
 
     if(params.n_correction)
     {
-        ComputeRefractionCorrection(params, p_field.height, p_field.width);
+        ComputeRefractionCorrection(params, ref_width, ref_height, p_field.height, p_field.width);
         p_field.u -= correction[0];
         p_field.v -= correction[1];
         p_field.CalcMag();
@@ -607,62 +774,80 @@ void Session::ScaleFields(const ParamsSnapshot& params)
 
     if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
     {
-        correlation_field.resize(raw_correlation_field.size());
-        for(int i = 0; i < (int)raw_correlation_field.size(); i++)
+        for(auto& group : groups)
         {
-            correlation_field[i].u      = raw_correlation_field[i].u.array();
-            correlation_field[i].v      = raw_correlation_field[i].v.array();
-            correlation_field[i].mag      = raw_correlation_field[i].mag.array();
-            correlation_field[i].s2n    = raw_correlation_field[i].s2n;
-            correlation_field[i].width  = raw_correlation_field[i].width;
-            correlation_field[i].height = raw_correlation_field[i].height;
+            group.correlation_field.resize(group.raw_correlation_field.size());
+            for(int i = 0; i < static_cast<int>(group.raw_correlation_field.size()); i++)
+            {
+                group.correlation_field[i].u      = group.raw_correlation_field[i].u.array();
+                group.correlation_field[i].v      = group.raw_correlation_field[i].v.array();
+                group.correlation_field[i].mag    = group.raw_correlation_field[i].mag.array();
+                group.correlation_field[i].s2n    = group.raw_correlation_field[i].s2n;
+                group.correlation_field[i].width  = group.raw_correlation_field[i].width;
+                group.correlation_field[i].height = group.raw_correlation_field[i].height;
+            }
         }
     }
 
     if(GetStageState(STAGE_VAL) != Idle && GetStageState(STAGE_VAL) != Ready)
     {
-        val_field.resize(raw_val_field.size());
-        for(int i = 0; i < (int)raw_val_field.size(); i++)
+        for(auto& group : groups)
         {
-            val_field[i].u      = raw_val_field[i].u.array();
-            val_field[i].v      = raw_val_field[i].v.array();
-            val_field[i].mag      = raw_val_field[i].mag.array();
-            val_field[i].s2n    = raw_val_field[i].s2n;
-            val_field[i].width  = raw_val_field[i].width;
-            val_field[i].height = raw_val_field[i].height;
+            group.val_field.resize(group.raw_val_field.size());
+            for(int i = 0; i < static_cast<int>(group.raw_val_field.size()); i++)
+            {
+                group.val_field[i].u      = group.raw_val_field[i].u.array();
+                group.val_field[i].v      = group.raw_val_field[i].v.array();
+                group.val_field[i].mag    = group.raw_val_field[i].mag.array();
+                group.val_field[i].s2n    = group.raw_val_field[i].s2n;
+                group.val_field[i].width  = group.raw_val_field[i].width;
+                group.val_field[i].height = group.raw_val_field[i].height;
+            }
         }
     }
 
     if(GetStageState(STAGE_RECON) != Idle && GetStageState(STAGE_RECON) != Ready)
     {
-        surface.resize(raw_surface.size());
-        for(int i = 0; i < (int)raw_surface.size(); i++)
-            surface[i] = raw_surface[i].array() * scale * surf_fac;
+        for(auto& group : groups)
+        {
+            group.surface.resize(group.raw_surface.size());
+            for(int i = 0; i < static_cast<int>(group.raw_surface.size()); i++)
+                group.surface[i] = group.raw_surface[i].array() * scale * surf_fac;
+        }
     }
 
     //Refraction correction is in pixel units, do before scaling
     if(params.n_correction)
-        ApplyRefractionCorrection(params);
+    {
+        for(auto& group : groups)
+            ApplyRefractionCorrection(params, group);
+    }
 
     if(!params.raw_displacements)
     {
         if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
         {
-            for(int i = 0; i < (int)correlation_field.size(); i++)
+            for(auto& group : groups)
             {
-                correlation_field[i].u      *= scale;
-                correlation_field[i].v      *= scale;
-                correlation_field[i].mag    *= scale;
+                for(auto& field : group.correlation_field)
+                {
+                    field.u   *= scale;
+                    field.v   *= scale;
+                    field.mag *= scale;
+                }
             }
         }
 
         if(GetStageState(STAGE_VAL) != Idle && GetStageState(STAGE_VAL) != Ready)
         {
-            for(int i = 0; i < (int)val_field.size(); i++)
+            for(auto& group : groups)
             {
-                val_field[i].u      *= scale;
-                val_field[i].v      *= scale;
-                val_field[i].mag    *= scale;
+                for(auto& field : group.val_field)
+                {
+                    field.u   *= scale;
+                    field.v   *= scale;
+                    field.mag *= scale;
+                }
             }
         }
     }
@@ -681,76 +866,64 @@ void Session::SaveAsync(const std::string& base_path)
 
     save_task = std::async(std::launch::async, [this, base_path]()
     {
-        if(GetStageState(STAGE_CORRELATION) == Done) SaveCorrelationCSV(base_path + "_correlation.csv");
-        if(GetStageState(STAGE_VAL)   == Done) SaveValCSV(base_path + "_val.csv");
-        if(GetStageState(STAGE_RECON) == Done) SaveSurfaceCSV(base_path + "_surface.csv");
+        if(GetStageState(STAGE_CORRELATION) == Done) SaveCorrelationCSV(base_path);
+        if(GetStageState(STAGE_VAL)   == Done) SaveValCSV(base_path);
+        if(GetStageState(STAGE_RECON) == Done) SaveSurfaceCSV(base_path);
     });
 }
 
 void Session::SaveCorrelationCSV(const std::string& base_path)
 {
-    for(int i = 0; i < (int)correlation_field.size(); i++)
+    for(int g = 0; g < static_cast<int>(groups.size()); g++)
     {
-        std::string path = base_path;
-        if(correlation_field.size() > 1)
+        const auto& group = groups[g];
+        for(int i = 0; i < static_cast<int>(group.correlation_field.size()); i++)
         {
-            auto dot = base_path.rfind('.');
-            path = (dot != std::string::npos)
-                ? base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot)
-                : base_path + "_" + std::to_string(i);
+            std::string path = BuildFlowNamedPath(base_path, group.flow_paths[i], "correlation", g, i);
+            group.correlation_field[i].SaveCSV(path);
         }
-        correlation_field[i].SaveCSV(path);
     }
 }
 
 void Session::SaveValCSV(const std::string& base_path)
 {
-    for(int i = 0; i < (int)val_field.size(); i++)
+    for(int g = 0; g < static_cast<int>(groups.size()); g++)
     {
-        std::string path = base_path;
-        if(val_field.size() > 1)
+        const auto& group = groups[g];
+        for(int i = 0; i < static_cast<int>(group.val_field.size()); i++)
         {
-            auto dot = base_path.rfind('.');
-            path = (dot != std::string::npos)
-                ? base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot)
-                : base_path + "_" + std::to_string(i);
+            std::string path = BuildFlowNamedPath(base_path, group.flow_paths[i], "val", g, i);
+            group.val_field[i].SaveCSV(path);
         }
-        val_field[i].SaveCSV(path);
     }
 }
 
 void Session::SaveSurfaceCSV(const std::string& base_path)
 {
-    for(int i = 0; i < surface.size(); i++)
+    for(int g = 0; g < static_cast<int>(groups.size()); g++)
     {
-        //Build filename
-        std::string path = base_path;
-        if(surface.size() > 1)
+        const auto& group = groups[g];
+        for(int i = 0; i < static_cast<int>(group.surface.size()); i++)
         {
-            // Insert index before extension
-            auto dot = base_path.rfind('.');
-            if(dot != std::string::npos)
-                path = base_path.substr(0, dot) + "_" + std::to_string(i) + base_path.substr(dot);
-            else
-                path = base_path + "_" + std::to_string(i);
-        }
+            std::string path = BuildFlowNamedPath(base_path, group.flow_paths[i], "surface", g, i);
 
-        std::ofstream file;
-        file.open(path);
+            std::ofstream file;
+            file.open(path);
 
-        if(!file.is_open())
-            continue;
+            if(!file.is_open())
+                continue;
 
-        const Eigen::MatrixXf& s = surface[i];
-        file << "rows,cols\n";
-        file << s.rows() << "," << s.cols() << "\n";
+            const Eigen::MatrixXf& s = group.surface[i];
+            file << "rows,cols\n";
+            file << s.rows() << "," << s.cols() << "\n";
 
-        //Collumn major format
-        for(int j = 0; j < s.cols(); j++)
-        {
-            for(int k = 0; k < s.rows(); k++)
+            //Collumn major format
+            for(int j = 0; j < s.cols(); j++)
             {
-                file << s(k, j) << "\n";
+                for(int k = 0; k < s.rows(); k++)
+                {
+                    file << s(k, j) << "\n";
+                }
             }
         }
     }
@@ -758,68 +931,148 @@ void Session::SaveSurfaceCSV(const std::string& base_path)
 
 const Image& Session::GetRef() const
 {
-    return ref;
+    return groups[active_group_index].ref;
 }
 
 const Image& Session::GetFlow() const
 {
-    return flows[active_index];
+    return groups[active_group_index].flows[active_flow_index];
 }
 
 const std::string& Session::GetRefPath() const
 {
-    return ref_path;
+    return groups[active_group_index].ref_path;
 }
 
 const std::string& Session::GetFlowPath() const
 {
-    return flow_paths[active_index];
+    return groups[active_group_index].flow_paths[active_flow_index];
+}
+
+int Session::GetGroupCount() const
+{
+    return static_cast<int>(groups.size());
+}
+
+int Session::GetActiveGroupIndex() const
+{
+    return active_group_index;
+}
+
+int Session::GetActiveFlowIndex() const
+{
+    return active_flow_index;
+}
+
+void Session::SetActiveGroupIndex(int i)
+{
+    if(groups.empty())
+    {
+        active_group_index = 0;
+        active_flow_index = 0;
+        return;
+    }
+
+    active_group_index = std::clamp(i, 0, static_cast<int>(groups.size()) - 1);
+
+    const auto& group = groups[active_group_index];
+    if(group.flows.empty())
+        active_flow_index = 0;
+    else
+        active_flow_index = std::clamp(active_flow_index, 0, static_cast<int>(group.flows.size()) - 1);
+}
+
+void Session::SetActiveFlowIndex(int i)
+{
+    if(groups.empty())
+    {
+        active_flow_index = 0;
+        return;
+    }
+
+    const auto& group = groups[active_group_index];
+    if(group.flows.empty())
+    {
+        active_flow_index = 0;
+        return;
+    }
+
+    active_flow_index = std::clamp(i, 0, static_cast<int>(group.flows.size()) - 1);
+}
+
+void Session::SetActiveSelection(int group_i, int flow_i)
+{
+    if(groups.empty())
+    {
+        active_group_index = 0;
+        active_flow_index = 0;
+        return;
+    }
+
+    active_group_index = std::clamp(group_i, 0, static_cast<int>(groups.size()) - 1);
+
+    const auto& group = groups[active_group_index];
+    if(group.flows.empty())
+        active_flow_index = 0;
+    else
+        active_flow_index = std::clamp(flow_i, 0, static_cast<int>(group.flows.size()) - 1);
 }
 
 void Session::SetActiveIndex(int i)
 {
-    if(flows.empty()) return;
-    active_index = std::clamp(i, 0, (int)flows.size() - 1);
+    SetActiveFlowIndex(i);
 }
 
-int Session::GetActiveIndex() const {return active_index;}
+int Session::GetActiveIndex() const {return active_flow_index;}
 
 bool Session::HasFlow() const
 {
-    return !flows.empty()
-        && std::all_of(flows.begin(), flows.end(), [](const Image& image)
-           {
-               return image.GetLoaded();
-           });
+    if(groups.empty())
+        return false;
+
+    return GroupHasLoadedFlows(groups[active_group_index]);
 }
 
-int  Session::GetFlowCount() const  { return (int)flows.size(); }
+int Session::GetFlowCount() const
+{
+    if(groups.empty())
+        return 0;
 
-const std::vector<std::string>& Session::GetFlowPaths() const { return flow_paths; }
+    return static_cast<int>(groups[active_group_index].flows.size());
+}
+
+const std::vector<std::string>& Session::GetFlowPaths() const
+{
+    static const std::vector<std::string> empty_paths;
+    if(groups.empty())
+        return empty_paths;
+
+    return groups[active_group_index].flow_paths;
+}
 
 const VectorField& Session::GetCorrelationField() const
 {
-    return correlation_field[active_index];
+    return groups[active_group_index].correlation_field[active_flow_index];
 }
 
 const VectorField& Session::GetRawCorrelationField() const
 {
-    return raw_correlation_field[active_index];
+    return groups[active_group_index].raw_correlation_field[active_flow_index];
 }
 
 const VectorField& Session::GetValField() const
 {
-    return val_field[active_index];
+    return groups[active_group_index].val_field[active_flow_index];
 }
 
 const VectorField& Session::GetRawValField() const
 {
-    return raw_val_field[active_index];
+    return groups[active_group_index].raw_val_field[active_flow_index];
 }
 
 const Eigen::MatrixXf& Session::GetSurface() const
 {
-    return surface[active_index];
+    return groups[active_group_index].surface[active_flow_index];
 }
 
 float Session::GetStageProgress(Stages s) const

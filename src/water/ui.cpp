@@ -77,12 +77,27 @@ void UI::Draw()
 
 void UI::DrawLoadPanel()
 {
+    auto reload_active_images = [this]()
+    {
+        if(ref_tex) SDL_DestroyTexture(ref_tex);
+        ref_tex = session.GetRef().GetLoaded() ? LoadTextureFromPath(renderer, session.GetRefPath()) : nullptr;
+
+        if(flow_tex) SDL_DestroyTexture(flow_tex);
+        flow_tex = session.HasFlow() ? LoadTextureFromPath(renderer, session.GetFlowPath()) : nullptr;
+    };
+
+    auto invalidate_result_textures = [this]()
+    {
+        for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
+        for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
+        SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+    };
+
     if(!pending_ref_path.empty() && !session.IsRunning())
     {
         session.LoadRef(pending_ref_path);
-
-        if(ref_tex) SDL_DestroyTexture(ref_tex);
-        ref_tex = LoadTextureFromPath(renderer, pending_ref_path);
+        reload_active_images();
+        invalidate_result_textures();
 
         pending_ref_path.clear();
         file_dialog_open = false;
@@ -91,9 +106,8 @@ void UI::DrawLoadPanel()
     if(!pending_flow_paths.empty() && !session.IsRunning())
     {
         session.LoadFlow(pending_flow_paths);
-
-        if(flow_tex) SDL_DestroyTexture(flow_tex);
-        flow_tex = session.HasFlow() ? LoadTextureFromPath(renderer, session.GetFlowPath()) : nullptr;
+        reload_active_images();
+        invalidate_result_textures();
 
         pending_flow_paths.clear();
         file_dialog_open = false;
@@ -106,6 +120,59 @@ void UI::DrawLoadPanel()
     ImGui::Begin("Load Images", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);*/
 
     ImGui::Begin("Load Images", nullptr);
+
+    ImGui::SeparatorText("Groups");
+    ImGui::Text("Group %d / %d", session.GetActiveGroupIndex() + 1, std::max(1, session.GetGroupCount()));
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", session.GetRef().GetLoaded() ? "Ref Loaded" : "No Ref");
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", session.HasFlow() ? "Flows Loaded" : "No Flows");
+
+    bool group_controls_disabled = file_dialog_open || session.IsRunning();
+    if(group_controls_disabled) ImGui::BeginDisabled();
+
+    bool disable_prev_group = session.GetActiveGroupIndex() <= 0;
+    if(disable_prev_group) ImGui::BeginDisabled();
+    if(ImGui::Button("< Group"))
+    {
+        session.SetActiveGroupIndex(session.GetActiveGroupIndex() - 1);
+        reload_active_images();
+        invalidate_result_textures();
+    }
+    if(disable_prev_group) ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    bool disable_next_group = session.GetActiveGroupIndex() + 1 >= session.GetGroupCount();
+    if(disable_next_group) ImGui::BeginDisabled();
+    if(ImGui::Button("Group >"))
+    {
+        session.SetActiveGroupIndex(session.GetActiveGroupIndex() + 1);
+        reload_active_images();
+        invalidate_result_textures();
+    }
+    if(disable_next_group) ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if(ImGui::Button("Add"))
+    {
+        session.AddGroup();
+        reload_active_images();
+        invalidate_result_textures();
+    }
+
+    ImGui::SameLine();
+    if(ImGui::Button("Delete"))
+    {
+        session.DeleteActiveGroup();
+        reload_active_images();
+        invalidate_result_textures();
+    }
+
+    if(group_controls_disabled) ImGui::EndDisabled();
 
     ImGui::SeparatorText("Reference Image");
 
@@ -163,34 +230,34 @@ void UI::DrawLoadPanel()
 
     if(session.GetFlowCount() > 1)
     {
-        ImGui::SeparatorText("Active Image");
-        int idx = session.GetActiveIndex();
+        ImGui::SeparatorText("Active Flow");
+        int idx = session.GetActiveFlowIndex();
 
         if(session.IsRunning())
             ImGui::BeginDisabled();
 
-        if(ImGui::Button("< Prev") && idx > 0)
+        ImGui::Text("Flow %d / %d", idx + 1, session.GetFlowCount());
+
+        bool disable_prev_flow = idx <= 0;
+        if(disable_prev_flow) ImGui::BeginDisabled();
+        if(ImGui::Button("< Prev"))
         {
-            session.SetActiveIndex(idx - 1);
-            if(flow_tex) SDL_DestroyTexture(flow_tex);
-            flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
-            // Null textures so they rebuild for new active image
-            for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
-            for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
-            SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+            session.SetActiveFlowIndex(idx - 1);
+            reload_active_images();
+            invalidate_result_textures();
         }
+        if(disable_prev_flow) ImGui::EndDisabled();
+
         ImGui::SameLine();
-        if(ImGui::Button("Next >") && idx < session.GetFlowCount() - 1)
+        bool disable_next_flow = idx >= session.GetFlowCount() - 1;
+        if(disable_next_flow) ImGui::BeginDisabled();
+        if(ImGui::Button("Next >"))
         {
-            session.SetActiveIndex(idx + 1);
-            if(flow_tex) SDL_DestroyTexture(flow_tex);
-            flow_tex = LoadTextureFromPath(renderer, session.GetFlowPath());
-            for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
-            for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
-            SDL_DestroyTexture(surf_texture); surf_texture = nullptr;
+            session.SetActiveFlowIndex(idx + 1);
+            reload_active_images();
+            invalidate_result_textures();
         }
-        ImGui::SameLine();
-        ImGui::Text("%d / %d", idx + 1, session.GetFlowCount());
+        if(disable_next_flow) ImGui::EndDisabled();
 
         if(session.IsRunning())
             ImGui::EndDisabled();
