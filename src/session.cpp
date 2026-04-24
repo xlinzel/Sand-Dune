@@ -512,7 +512,7 @@ void Session::RunAllAsync()
                     float stage_p = (completed_before + p) / total;
                     progress = stage_p;
                     stage_progress[STAGE_CORRELATION] = stage_p;
-                    full_progress = stage_p / 3.0f;
+                    full_progress = stage_p / 2.05f;
                 });
                 completed++;
             }
@@ -546,7 +546,7 @@ void Session::RunAllAsync()
                 float stage_p = static_cast<float>(completed) / total;
                 progress = stage_p;
                 stage_progress[STAGE_VAL] = stage_p;
-                full_progress = (1.0f + stage_p) / 3.0f;
+                full_progress = (1.0f + stage_p * 0.05f) / 2.05f;
             }
         }
 
@@ -593,7 +593,7 @@ void Session::RunAllAsync()
                 float stage_p = static_cast<float>(completed) / total;
                 progress = stage_p;
                 stage_progress[STAGE_RECON] = stage_p;
-                full_progress = (2.0f + stage_p) / 3.0f;
+                full_progress = (1.05f + stage_p) / 2.05f;
             }
         }
 
@@ -854,7 +854,7 @@ void Session::ScaleFields(const ParamsSnapshot& params)
     
 }
 
- bool Session::IsSaving() const
+bool Session::IsSaving() const
 {
     return save_task.valid() &&
             save_task.wait_for(std::chrono::seconds(0)) != std::future_status::ready;

@@ -1,0 +1,452 @@
+\documentclass[11pt]{article}
+
+% ── Page geometry ──────────────────────────────────────────────────────────────
+\usepackage[a4paper, top=25mm, bottom=28mm, left=20mm, right=20mm]{geometry}
+
+% ── Fonts ──────────────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}          % Palatino for body text and math
+\usepackage{microtype}
+
+% ── Math / science ─────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+
+% ── Layout ─────────────────────────────────────────────────────────────────────
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{setspace}
+
+% ── Color (loaded before hyperref and colortbl) ────────────────────────────────
+\usepackage[dvipsnames]{xcolor}
+\definecolor{accent}{HTML}{1B4F8A}       % deep navy blue
+\definecolor{accentlight}{HTML}{EBF2FA}  % pale blue for table header rows
+\definecolor{codebg}{HTML}{F4F6F9}       % near-white blue-tinted code background
+\definecolor{codenums}{HTML}{A0B4C8}     % muted blue-gray for line numbers
+
+% ── Figures / tables ───────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage[labelfont=bf, font=small]{caption}
+
+% ── Code – tcolorbox with listings ────────────────────────────────────────────
+\usepackage{listings}
+\usepackage[breakable,skins,listings]{tcolorbox}
+
+% C++ code style (used inside cppcode environment)
+\lstdefinestyle{cppinner}{
+  language=C++,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{accent}\bfseries,
+  commentstyle=\color{gray!70}\itshape,
+  stringstyle=\color{BurntOrange},
+  numbers=left,
+  numberstyle=\tiny\color{codenums},
+  numbersep=10pt,
+  tabsize=4,
+  breaklines=true,
+  showstringspaces=false,
+  keepspaces=true
+}
+
+% Plain-text format style (used inside fmtcode environment)
+\lstdefinestyle{fmtinner}{
+  language={},
+  basicstyle=\ttfamily\small,
+  numbers=none,
+  tabsize=4,
+  breaklines=true,
+  showstringspaces=false
+}
+
+% Styled C++ code block: flat bg, accent left rule, no frame border
+\newtcblisting{cppcode}[1][]{
+  enhanced, breakable,
+  arc=0pt, outer arc=0pt,
+  colback=codebg,
+  colframe=codebg,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{accent},
+  top=5pt, bottom=5pt, left=4pt, right=4pt,
+  listing only,
+  listing options={style=cppinner},
+  #1
+}
+
+% Styled plain-text format block: neutral bg, gray left rule
+\newtcblisting{fmtcode}[1][]{
+  enhanced, breakable,
+  arc=0pt, outer arc=0pt,
+  colback=gray!5,
+  colframe=gray!5,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{gray!45},
+  top=5pt, bottom=5pt, left=4pt, right=4pt,
+  listing only,
+  listing options={style=fmtinner},
+  #1
+}
+
+% ── Headers / footers ──────────────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray!65} Sand Dune \textperiodcentered\ BOS System Documentation}
+\fancyhead[R]{\small\color{gray!65} \leftmark}
+\fancyfoot[C]{\small\color{gray!65} \thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+% ── Section formatting ─────────────────────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\large\bfseries\color{accent}}
+  {\thesection}{1em}{}
+  [{\vspace{2pt}\color{accent!30}\hrule height 0.6pt\vspace{4pt}}]
+\titleformat{\subsection}
+  {\normalsize\bfseries}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalsize\itshape}
+  {\thesubsubsection}{1em}{}
+\titlespacing{\section}{0pt}{2.5ex}{1.2ex}
+\titlespacing{\subsection}{0pt}{2ex}{0.8ex}
+
+% ── Links ──────────────────────────────────────────────────────────────────────
+\usepackage[colorlinks=true, linkcolor=accent, citecolor=accent!80!black,
+            urlcolor=accent!80!black]{hyperref}
+\usepackage{xurl}
+\urlstyle{tt}
+
+% ── Custom commands ────────────────────────────────────────────────────────────
+% Inline code: accent-colored monospace, with line-break permission after
+% common delimiters so long identifiers don't overflow the right margin.
+\newcommand{\codefmt}[1]{%
+  \begingroup
+  \ttfamily
+  \hyphenchar\font=`\-
+  \emergencystretch=3em
+  \hspace{0pt}#1\hspace{0pt}%
+  \endgroup}
+\newcommand{\code}[1]{{\color{accent!85!black}\codefmt{#1}}}
+\newcommand{\file}[1]{{\color{accent!70!black}\codefmt{#1}}}
+\newcommand{\cls}[1]{{\bfseries\color{accent}\codefmt{#1}}}
+\newcommand{\param}[1]{{\color{accent!60!black}\codefmt{#1}}}
+
+% ── Figure borders ─────────────────────────────────────────────────────────────
+% Use \figimg instead of \includegraphics to get a tight black border.
+\newcommand{\figimg}[2][]{%
+  \tcbox[enhanced, arc=4pt,
+         boxrule=4pt, colframe=black, colback=white,
+         boxsep=0pt, left=0pt, right=0pt, top=0pt, bottom=0pt]{%
+    \includegraphics[#1]{#2}}%
+}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{8cm}
+  {\Huge\bfseries Background Oriented Schlieren SOP\par}
+  \vspace{2em}
+  \hrule
+  \vspace{1.5em}
+  {\large Xander Linzel\\
+   \href{mailto:xander.linzel@irradiant.tech}{\texttt{xander.linzel@irradiant.tech}}\par}
+  \vspace{1em}
+  {\normalsize \today\par}
+
+  \vspace*{8cm}
+  
+\end{titlepage}
+
+    \tableofcontents
+
+  \vspace*{1cm}
+  
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\section{Measurement and Image Capture}
+
+This section is written as a step-by-step procedure. Follow the steps in order and do not change the setup between the reference image and the flow image unless the step explicitly tells you to.
+
+\subsection{Before You Start}
+
+\begin{enumerate}
+    \item Turn on the LED backlight.
+    \item Make sure the background pattern is installed correctly, meaning flat and centered on the LED panel.
+    \item Make sure the printed side of the background pattern is facing down.
+    \item Reduce room light as much as possible.
+    \item Make sure the setup is not vibrating or being bumped.
+    \item Make sure the sample holder is in place, and sturdy.
+    \item Open the AmScope software on your computer and connect it to the camera.
+    \item Make sure the camera is focused on the background pattern, by using teh AmScope live feed.
+    \item Check that the dots in the pattern look sharp on screen.
+    \item Confirm that the optical parameters are known or already calibrated:
+    \begin{itemize}
+        \item sensor pixel pitch $P_{px}$
+        \item background-to-sample distance $Z_d$
+        \item sample-to-lens distance $Z_a$
+        \item focal length $f$
+        \item sample refractive index $n$
+        \item sample thickness $t$
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Reference and Flow Image Capture}
+
+\begin{enumerate}
+    \item Make sure the live camera image is visible.
+    \item Check focus again.
+    \item Check brightness again.
+    \item Make sure there is \textbf{no sample} in the optical path.
+    \item Press \textbf{Capture Photo}.
+    \item Press \textbf{Take Photo}.
+    \item Save this image using the correct reference name.
+    \item Use a clear file name such as \texttt{sampleA\_ref.png}.
+    \item Place the sample in the sample holder.
+    \item Make sure the sample is seated properly.
+    \item Make sure the sample is not heavily tilted.
+    \item Press \textbf{Capture Photo} again.
+    \item Press \textbf{Take Photo}.
+    \item Save this image using the correct flow name.
+    \item Use a clear file name such as \texttt{sampleA\_flow.png}.
+    \item If multiple flow images are needed for the same reference, repeat the previous capture step and save each flow image with a unique name.
+    \item Do not change focus, camera position, or geometry between the reference image and its matching flow images.
+\end{enumerate}
+
+\subsection{Practical Notes}
+
+\begin{itemize}
+    \item Use one reference image and its matching flow images as one measurement group.
+    \item If you change the reference condition, take a new reference image and make a new group in the software.
+    \item Strong ambient light, vibration, blur, or sample tilt can create false displacement signals.
+    \item If the dot pattern looks soft or smeared, stop and refocus before continuing.
+\end{itemize}
+
+\section{Using the Application}
+\label{sec:usage}
+
+\subsection{Typical Workflow}
+
+\begin{enumerate}
+    \item Open the \textbf{Sand Dune} application.
+    \item Go to the \textbf{Load Images} panel.
+    \item If this is the first measurement group, use the default group already shown.
+    \item If you need another reference with its own matching flow images, press \textbf{Add} to create a new group.
+    \item Use the group controls to move to the group you want to work on.
+    \item In the \textbf{Reference Image} section, press \textbf{Browse}.
+    \item Select the reference image for the active group.
+    \item In the \textbf{Flow Images} section, press \textbf{Browse}.
+    \item Select one or more flow images that belong to that same reference.
+    \item If the active group contains more than one flow image, use the \textbf{Active Flow} controls to move between them.
+    \item Repeat the group / reference / flow loading steps for every measurement set.
+    \item Go to the \textbf{Parameters} panel.
+    \item Enter the correlation settings:
+    \begin{itemize}
+        \item window size
+        \item overlap
+        \item PID on/off
+        \item PID iterations
+        \item PID relaxation
+        \item PID smoothing passes
+    \end{itemize}
+    \item Enter the optical settings:
+    \begin{itemize}
+        \item sensor pixel pitch
+        \item background-to-sample distance
+        \item sample-to-lens distance
+        \item lens focal length
+        \item aperture diameter
+    \end{itemize}
+    \item Enter the sample settings:
+    \begin{itemize}
+        \item thickness
+        \item refractive index
+    \end{itemize}
+    \item Choose the reconstruction mode:
+    \begin{itemize}
+        \item RI variation
+        \item thickness variation
+    \end{itemize}
+    \item Choose the integration method:
+    \begin{itemize}
+        \item Masked Poisson
+        \item Frankot--Chellappa
+    \end{itemize}
+    \item Turn \textbf{Field Correction} on or off as needed.
+    \item If reconstruction should be limited to the sample region, enable the mask.
+    \item Set the mask position and radius.
+    \item Check the \textbf{Calculations} panel.
+    \item Make sure the displayed grid spacing, field width, and optical values look reasonable.
+    \item Go to the \textbf{Pipeline} panel.
+    \item Press \textbf{Run Full Pipeline} to process everything in order.
+    \item If needed, run the stages one at a time:
+    \begin{itemize}
+        \item Correlation
+        \item Validation
+        \item Reconstruction
+    \end{itemize}
+    \item Wait for the status to show \textbf{Done}.
+    \item Open the visualization panels and inspect:
+    \begin{itemize}
+        \item Correlation
+        \item Validation
+        \item Surface
+    \end{itemize}
+    \item For correlation and validation, choose the map you want to view:
+    \begin{itemize}
+        \item $u$
+        \item $v$
+        \item magnitude
+        \item s2n
+    \end{itemize}
+    \item If needed, toggle between raw pixel display and scaled physical units.
+    \item Adjust the colormap min and max sliders if the range needs to be tightened.
+    \item Go to the \textbf{Save} panel.
+    \item Choose the output directory.
+    \item Enter an output name if desired.
+    \item Press \textbf{Save All}.
+\end{enumerate}
+
+\subsection{Panel Reference}
+
+\subsubsection{Load Panel}
+
+The \textbf{Load Images} panel is now group-based.
+
+\begin{itemize}
+    \item \textbf{Groups section:} Shows the active group number and whether the active group has a reference image and flow images loaded.
+    \item \textbf{$<$ Group / Group $>$:} Moves between groups.
+    \item \textbf{Add:} Creates a new empty group.
+    \item \textbf{Delete:} Deletes the active group. If only one group remains, it is reset to an empty group.
+    \item \textbf{Reference Image section:} Loads the reference image for the active group.
+    \item \textbf{Flow Images section:} Loads one or more flow images for the active group.
+    \item \textbf{Active Flow section:} Appears only when the active group has more than one flow image loaded.
+\end{itemize}
+
+\subsubsection{Parameters Panel}
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \rowcolor{accentlight} Group & Control & Effect \\
+  \midrule
+  Correlation & Window size & Interrogation window side length (pixels) \\
+              & Overlap     & Window overlap (pixels; step = size $-$ overlap) \\
+              & Window Deformation (PID) & Enables iterative window deformation \\
+              & PID iterations & Number of PID passes after baseline \\
+              & PID relaxation & Damping on PID residual updates \\
+              & PID smoothing  & Number of smoothing passes on the PID field \\
+  \midrule
+  Optical     & $P_{px}$       & Sensor pixel pitch (\si{\micro\metre}) \\
+              & $Z_d$          & Background-to-sample distance (\si{mm}) \\
+              & $Z_a$          & Sample-to-lens distance (\si{mm}) \\
+              & $f$            & Lens focal length (\si{mm}) \\
+              & $d_a$          & Aperture diameter (\si{mm}) \\
+  \midrule
+  Sample      & $t$            & Sample thickness (\si{mm}) \\
+              & $n$            & Sample refractive index \\
+  \midrule
+  Reconstruction & Mode        & RI variation or thickness variation \\
+                 & Solver      & Masked Poisson or Frankot--Chellappa \\
+                 & Field Correction & Applies the refraction correction field \\
+  \midrule
+  Mask        & Mask Enabled   & Enables circular ROI masking \\
+              & X / Y Position & Mask centre location \\
+              & Radius         & Mask radius \\
+  \midrule
+  Background  & Dot diameter   & Background dot diameter estimate (\si{mm}) \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Calculations Panel}
+
+The \textbf{Calculations} panel updates live from the current parameters and shows derived values such as:
+\begin{itemize}
+    \item sensor image distance
+    \item magnification
+    \item effective dot size in pixels
+    \item suggested correlation window size
+    \item spatial resolution on the sample plane
+\end{itemize}
+
+Use this panel as a quick sanity check before running the pipeline.
+
+\subsubsection{Pipeline Panel}
+
+The \textbf{Pipeline} panel shows:
+\begin{itemize}
+    \item stage status
+    \item run buttons for each stage
+    \item a \textbf{Run Full Pipeline} button
+    \item progress bars
+    \item ETA values during processing
+\end{itemize}
+
+The pipeline processes all loaded groups and all flow images currently in the session.
+
+\subsubsection{Visualization Panel}
+
+\begin{itemize}
+    \item \textbf{Correlation panel:} Shows $u$, $v$, magnitude, or s2n.
+    \item \textbf{Validation panel:} Shows $u$, $v$, magnitude, or s2n after validation.
+    \item \textbf{Surface panel:} Shows the reconstructed scalar field.
+    \item \textbf{Raw/scaled toggle:} Switches correlation and validation display between raw pixels and scaled physical units.
+    \item \textbf{Min/max sliders:} Control the displayed colormap range.
+\end{itemize}
+
+\subsubsection{Save Panel}
+
+The \textbf{Save} panel writes output for all processed groups and flows.
+
+If a name is entered in the UI, saved files are named like:
+\begin{fmtcode}
+<ui_name>_<flow_name>_g<group>_f<flow>_correlation.csv
+<ui_name>_<flow_name>_g<group>_f<flow>_val.csv
+<ui_name>_<flow_name>_g<group>_f<flow>_surface.csv
+\end{fmtcode}
+
+If no name is entered in the UI, the flow name is used:
+\begin{fmtcode}
+<flow_name>_g<group>_f<flow>_correlation.csv
+<flow_name>_g<group>_f<flow>_val.csv
+<flow_name>_g<group>_f<flow>_surface.csv
+\end{fmtcode}
+
+\subsubsection{Settings Panel}
+
+The \textbf{Settings} panel contains the light/dark theme switch.
+
+\subsection{CSV File Formats}
+
+\paragraph{Correlation and Validation CSV.}
+The correlation and validation result files share the following layout:
+\begin{fmtcode}
+rows, cols
+<height>, <width>
+u, v, s2n
+<u00>, <v00>, <s2n00>
+...
+\end{fmtcode}
+Values are saved from the displayed processed fields.
+
+\paragraph{Surface CSV.}
+The surface file uses column-major ordering:
+\begin{fmtcode}
+rows, cols
+<height>, <width>
+<z[0,0]>
+<z[1,0]>
+...
+\end{fmtcode}
+Values are stored in column-major order.
+
+
+
+\end{document}
