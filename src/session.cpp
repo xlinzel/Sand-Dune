@@ -46,7 +46,8 @@ void Session::LoadRef(const std::string& path)
     {
         stagestates[STAGE_CORRELATION] = Ready;
     }
-    
+
+    std::lock_guard<std::mutex> lock(params_mutex);
     posx = GetRef().GetWidth() / 2;
     posy = GetRef().GetHeight() / 2;
 }
@@ -78,6 +79,7 @@ void Session::LoadFlow(const std::vector<std::string>& paths)
     if(ref.GetLoaded() && all_loaded)
     {
         stagestates[STAGE_CORRELATION] = Ready;
+        std::lock_guard<std::mutex> lock(params_mutex);
         posx = flows[0].GetWidth()  / 2;
         posy = flows[0].GetHeight() / 2;
     }
@@ -88,17 +90,19 @@ void Session::RunCorrelation()
     if(GetStageState(STAGE_CORRELATION) == Idle)
         return;
 
+    const auto params = GetParamsSnapshot();
+
     stagestates[STAGE_CORRELATION] = Busy;
     if(GetStageState(STAGE_VAL)   == Done) stagestates[STAGE_VAL]   = Dirty;
     if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
-    Correlator correlator(correlatorparameters);
+    Correlator correlator(params.correlatorparameters);
     raw_correlation_field.resize(flows.size());
 
     for(int i = 0; i < (int)flows.size(); i++)
         raw_correlation_field[i] = correlator.Compute(ref.GetMat(), flows[i].GetMat());
 
-    ScaleFields();
+    ScaleFields(params);
 
     stagestates[STAGE_CORRELATION] = Done;
     stagestates[STAGE_VAL] = Ready;
@@ -108,6 +112,8 @@ void Session::RunValidation()
 {
     if(GetStageState(STAGE_VAL) == Idle)
         return;
+
+    const auto params = GetParamsSnapshot();
 
     stagestates[STAGE_VAL] = Busy;
     if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
@@ -120,7 +126,7 @@ void Session::RunValidation()
         raw_val_field[i] = post.PostProcess(raw_correlation_field[i]);
     }
 
-    ScaleFields();
+    ScaleFields(params);
 
     stagestates[STAGE_VAL] = Done;
     stagestates[STAGE_RECON] = Ready;
@@ -131,6 +137,8 @@ void Session::RunReconstruction()
     if(GetStageState(STAGE_RECON) == Idle)
         return;
 
+    const auto params = GetParamsSnapshot();
+
     stagestates[STAGE_RECON] = Busy;
 
     Reconstruction recon;
@@ -139,14 +147,14 @@ void Session::RunReconstruction()
 
     Eigen::MatrixXf recon_mask = raw_val_field.empty()
                                ? Eigen::MatrixXf()
-                               : GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height);
+                               : GetReconstructionMask(params, raw_val_field[0].width, raw_val_field[0].height);
 
     for(int i = 0; i < (int)raw_val_field.size(); i++)
     {
-        raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
+        raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask, params);
     }
 
-    ScaleFields();
+    ScaleFields(params);
 
     stagestates[STAGE_RECON] = Done;
 }
@@ -157,10 +165,44 @@ bool Session::IsRunning() const
              activetask.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
 }
 
+Session::ParamsSnapshot Session::GetParamsSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(params_mutex);
+    return {
+        correlatorparameters,
+        opticalparameters,
+        posx,
+        posy,
+        radius,
+        a,
+        mask_apply,
+        n_correction,
+        b_ref,
+        raw_displacements
+    };
+}
+
+void Session::SetParamsSnapshot(const ParamsSnapshot& params)
+{
+    std::lock_guard<std::mutex> lock(params_mutex);
+    correlatorparameters = params.correlatorparameters;
+    opticalparameters = params.opticalparameters;
+    posx = params.posx;
+    posy = params.posy;
+    radius = params.radius;
+    a = params.a;
+    mask_apply = params.mask_apply;
+    n_correction = params.n_correction;
+    b_ref = params.b_ref;
+    raw_displacements = params.raw_displacements;
+}
+
 void Session::RunCorrelationAsync()
 {
     if(GetStageState(STAGE_CORRELATION) == Idle || IsRunning())
         return;
+
+    const auto params = GetParamsSnapshot();
 
     stagestates[STAGE_CORRELATION] = Busy;
     if(GetStageState(STAGE_VAL)   == Done) stagestates[STAGE_VAL]   = Dirty;
@@ -173,9 +215,9 @@ void Session::RunCorrelationAsync()
     full_progress = 0.0f;
     full_pipeline_running = false;
 
-    activetask = std::async(std::launch::async, [this]()
+    activetask = std::async(std::launch::async, [this, params]()
     {
-        Correlator correlator(correlatorparameters);
+        Correlator correlator(params.correlatorparameters);
         int n = (int)flows.size();
         raw_correlation_field.resize(n);
 
@@ -192,7 +234,7 @@ void Session::RunCorrelationAsync()
 
         if(stop_requested) return;
 
-        ScaleFields();
+        ScaleFields(params);
 
         progress = 1.0f;
         stage_progress[STAGE_CORRELATION] = 1.0f;
@@ -206,6 +248,8 @@ void Session::RunValidationAsync()
     if(GetStageState(STAGE_VAL) == Idle || IsRunning())
         return;
 
+    const auto params = GetParamsSnapshot();
+
     stagestates[STAGE_VAL] = Busy;
     if(GetStageState(STAGE_RECON) == Done) stagestates[STAGE_RECON] = Dirty;
 
@@ -216,7 +260,7 @@ void Session::RunValidationAsync()
     full_progress = 0.0f;
     full_pipeline_running = false;
 
-    activetask = std::async(std::launch::async, [this]()
+    activetask = std::async(std::launch::async, [this, params]()
     {
         Validation post;
         raw_val_field.resize(raw_correlation_field.size());
@@ -229,7 +273,7 @@ void Session::RunValidationAsync()
             stage_progress[STAGE_VAL] = stage_p;
         }
 
-        ScaleFields();
+        ScaleFields(params);
 
         progress = 1.0f;
         stage_progress[STAGE_VAL] = 1.0f;
@@ -245,6 +289,8 @@ void Session::RunReconstructionAsync()
     if(GetStageState(STAGE_RECON) == Idle || IsRunning())
         return;
 
+    const auto params = GetParamsSnapshot();
+
     stagestates[STAGE_RECON] = Busy;
     progress = 0.0f;
     task_start = std::chrono::steady_clock::now();
@@ -253,25 +299,25 @@ void Session::RunReconstructionAsync()
     full_progress = 0.0f;
     full_pipeline_running = false;
 
-    activetask = std::async(std::launch::async, [this]()
+    activetask = std::async(std::launch::async, [this, params]()
     {
         Reconstruction recon;
         int n = (int)raw_val_field.size();
         raw_surface.resize(n);
         Eigen::MatrixXf recon_mask = (n > 0)
-                                   ? GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height)
+                                   ? GetReconstructionMask(params, raw_val_field[0].width, raw_val_field[0].height)
                                    : Eigen::MatrixXf();
 
         for(int i = 0; i < n; i++)
         {
-            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
+            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask, params);
 
             float stage_p = (float)(i + 1) / n;
             progress = stage_p;
             stage_progress[STAGE_RECON] = stage_p;
         }
 
-        ScaleFields();
+        ScaleFields(params);
 
         progress = 1.0f;
         stage_progress[STAGE_RECON] = 1.0f;
@@ -283,6 +329,8 @@ void Session::RunAllAsync()
 {
     if(GetStageState(STAGE_CORRELATION) == Idle || IsRunning())
         return;
+
+    const auto params = GetParamsSnapshot();
 
     stagestates[STAGE_CORRELATION] = Busy;
     stagestates[STAGE_VAL]   = Idle;
@@ -298,12 +346,12 @@ void Session::RunAllAsync()
     full_task_start = task_start;
     full_pipeline_running = true;
 
-    activetask = std::async(std::launch::async, [this]()
+    activetask = std::async(std::launch::async, [this, params]()
     {
         int n = (int)flows.size();
 
         // --- Correlation ---
-        Correlator correlator(correlatorparameters);
+        Correlator correlator(params.correlatorparameters);
         raw_correlation_field.resize(n);
 
         for(int i = 0; i < n && !stop_requested; i++)
@@ -323,7 +371,7 @@ void Session::RunAllAsync()
             full_pipeline_running = false;
             return;
         }
-        ScaleFields();
+        ScaleFields(params);
         stage_progress[STAGE_CORRELATION] = 1.0f;
         full_progress = 1.0f / 3.0f;
         stagestates[STAGE_CORRELATION] = Done;
@@ -350,7 +398,7 @@ void Session::RunAllAsync()
             full_pipeline_running = false;
             return;
         }
-        ScaleFields();
+        ScaleFields(params);
         stage_progress[STAGE_VAL] = 1.0f;
         full_progress = 2.0f / 3.0f;
         stagestates[STAGE_VAL] = Done;
@@ -366,7 +414,7 @@ void Session::RunAllAsync()
         Reconstruction recon;
         raw_surface.resize(n);
         Eigen::MatrixXf recon_mask = (n > 0)
-                                   ? GetReconstructionMask(raw_val_field[0].width, raw_val_field[0].height)
+                                   ? GetReconstructionMask(params, raw_val_field[0].width, raw_val_field[0].height)
                                    : Eigen::MatrixXf();
 
         task_start = std::chrono::steady_clock::now();
@@ -376,7 +424,7 @@ void Session::RunAllAsync()
 
         for(int i = 0; i < n && !stop_requested; i++)
         {
-            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask);
+            raw_surface[i] = ReconstructField(recon, raw_val_field[i], recon_mask, params);
 
             float stage_p = (float)(i + 1) / n;
             progress = stage_p;
@@ -389,7 +437,7 @@ void Session::RunAllAsync()
             full_pipeline_running = false;
             return;
         }
-        ScaleFields();
+        ScaleFields(params);
 
         progress = 1.0f;
         stage_progress[STAGE_RECON] = 1.0f;
@@ -399,23 +447,23 @@ void Session::RunAllAsync()
     });
 }
 
-void Session::ComputeRefractionCorrection(int h, int w)
+void Session::ComputeRefractionCorrection(const ParamsSnapshot& params, int h, int w)
 {
-    float f    = opticalparameters.f    * 1e-3f;
-    float Z_a  = opticalparameters.Z_a  * 1e-3f;
-    float Z_d  = opticalparameters.Z_d  * 1e-3f;
-    float P_px = opticalparameters.P_px * 1e-6f;
-    float t    = opticalparameters.t    * 1e-3f;
+    float f    = params.opticalparameters.f    * 1e-3f;
+    float Z_a  = params.opticalparameters.Z_a  * 1e-3f;
+    float Z_d  = params.opticalparameters.Z_d  * 1e-3f;
+    float P_px = params.opticalparameters.P_px * 1e-6f;
+    float t    = params.opticalparameters.t    * 1e-3f;
     float Z_B  = Z_a + Z_d;
     float z_i  = f * Z_B / (Z_B - f);
 
-    int   step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
+    int   step = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap);
     float m1   = Z_a / z_i;
 
     float img_cx = 0.5f * (ref.GetWidth()  - 1.0f);
     float img_cy = 0.5f * (ref.GetHeight() - 1.0f);
 
-    float win_center = 0.5f * (correlatorparameters.window_size - 1.0f);
+    float win_center = 0.5f * (params.correlatorparameters.window_size - 1.0f);
 
     correction[0] = Eigen::MatrixXf::Zero(h, w);
     correction[1] = Eigen::MatrixXf::Zero(h, w);
@@ -434,7 +482,7 @@ void Session::ComputeRefractionCorrection(int h, int w)
 
             float theta = atan2(r, Z_a);
 
-            float thetar = asin(std::sin(theta) / opticalparameters.n);
+            float thetar = asin(std::sin(theta) / params.opticalparameters.n);
 
             float d = std::sin(theta - thetar) * t / cosf(thetar);
 
@@ -449,11 +497,11 @@ void Session::ComputeRefractionCorrection(int h, int w)
     }
 }
 
-void Session::ApplyRefractionCorrection()
+void Session::ApplyRefractionCorrection(const ParamsSnapshot& params)
 {
-    if(!n_correction || correlation_field.empty()) return;
+    if(!params.n_correction || correlation_field.empty()) return;
 
-    ComputeRefractionCorrection(correlation_field[0].height, correlation_field[0].width);
+    ComputeRefractionCorrection(params, correlation_field[0].height, correlation_field[0].width);
 
     if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
     {
@@ -476,15 +524,15 @@ void Session::ApplyRefractionCorrection()
     }
 }
 
-Eigen::MatrixXf Session::GetReconstructionMask(int width, int height)
+Eigen::MatrixXf Session::GetReconstructionMask(const ParamsSnapshot& params, int width, int height)
 {
-    if(mask_apply)
+    if(params.mask_apply)
     {
-        float step = static_cast<float>(std::max(1, correlatorparameters.window_size - correlatorparameters.overlap));
-        mask.GenBinCircleMask(width, height, {posx / step, posy / step}, radius / step);
+        float step = static_cast<float>(std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap));
+        mask.GenBinCircleMask(width, height, {params.posx / step, params.posy / step}, params.radius / step);
     }
 
-    if(mask_apply && mask.GetSet())
+    if(params.mask_apply && mask.GetSet())
         return mask.GetMask();
 
     return Eigen::MatrixXf::Ones(height, width);
@@ -492,13 +540,14 @@ Eigen::MatrixXf Session::GetReconstructionMask(int width, int height)
 
 Eigen::MatrixXf Session::ReconstructField(const Reconstruction& recon,
                                           const VectorField& field,
-                                          const Eigen::MatrixXf& recon_mask)
+                                          const Eigen::MatrixXf& recon_mask,
+                                          const ParamsSnapshot& params)
 {
     VectorField p_field = field;
 
-    if(n_correction)
+    if(params.n_correction)
     {
-        ComputeRefractionCorrection(p_field.height, p_field.width);
+        ComputeRefractionCorrection(params, p_field.height, p_field.width);
         p_field.u -= correction[0];
         p_field.v -= correction[1];
         p_field.CalcMag();
@@ -507,7 +556,7 @@ Eigen::MatrixXf Session::ReconstructField(const Reconstruction& recon,
     ReconstructionSolver solver = reconstruction_solver.load();
     if(solver == RECON_FRANKOT_CHELLAPPA)
     {
-        if(mask_apply
+        if(params.mask_apply
         && recon_mask.rows() == p_field.height
         && recon_mask.cols() == p_field.width)
         {
@@ -525,13 +574,18 @@ Eigen::MatrixXf Session::ReconstructField(const Reconstruction& recon,
 
 void Session::ScaleFields()
 {
+    ScaleFields(GetParamsSnapshot());
+}
+
+void Session::ScaleFields(const ParamsSnapshot& params)
+{
     // Clamp parameters to physically valid minimums to prevent division by zero.
-    float   t    = std::max(opticalparameters.t,    0.001f);
-    float   P_px = std::max(opticalparameters.P_px, 0.001f);
-    float   Z_d  = std::max(opticalparameters.Z_d,  0.001f);
-    float   Z_a  = std::max(opticalparameters.Z_a,  0.001f);
-    float   f    = std::max(opticalparameters.f,    0.001f);
-    float   n    = std::max(opticalparameters.n,    0.001f);
+    float   t    = std::max(params.opticalparameters.t,    0.001f);
+    float   P_px = std::max(params.opticalparameters.P_px, 0.001f);
+    float   Z_d  = std::max(params.opticalparameters.Z_d,  0.001f);
+    float   Z_a  = std::max(params.opticalparameters.Z_a,  0.001f);
+    float   f    = std::max(params.opticalparameters.f,    0.001f);
+    float   n    = std::max(params.opticalparameters.n,    0.001f);
 
     // scale converts raw pixel displacement into displayed gradient units
     // (dn/dx or mm/dx). surf_fac is the physical correlation-grid spacing in
@@ -540,12 +594,12 @@ void Session::ScaleFields()
     float Z_B   = Z_d + Z_a;
     float z_i   = f * Z_B / (Z_B - f);
 
-    float term = b_ref
+    float term = params.b_ref
                     ? t                   // RI mode: divide by thickness
                     : (n - 1.0f);         // thickness mode: divide by (n-1)
     term = std::max(term, 0.001f);
 
-    int step = std::max(1, correlatorparameters.window_size - correlatorparameters.overlap);
+    int step = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap);
     float scale =   P_px * 1e-3 * (Z_B - f)
                     / (f * Z_d * term);
 
@@ -587,10 +641,10 @@ void Session::ScaleFields()
     }
 
     //Refraction correction is in pixel units, do before scaling
-    if(n_correction)
-        ApplyRefractionCorrection();
+    if(params.n_correction)
+        ApplyRefractionCorrection(params);
 
-    if(!raw_displacements)
+    if(!params.raw_displacements)
     {
         if(GetStageState(STAGE_CORRELATION) != Idle && GetStageState(STAGE_CORRELATION) != Ready)
         {

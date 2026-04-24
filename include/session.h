@@ -4,6 +4,7 @@
 #include <chrono>
 #include <fstream>
 #include <atomic>
+#include <mutex>
 
 #include <sun/image.h>
 #include <sun/mask.h>
@@ -58,6 +59,21 @@ enum ReconstructionSolver
 class Session
 {
 public:
+    struct ParamsSnapshot
+    {
+        CorrelatorParameters correlatorparameters;
+        OpticalParameters opticalparameters;
+
+        int   posx = 0, posy = 0;
+        int   radius = 1000;
+        float a = 0.2f;
+        bool  mask_apply = true;
+
+        bool n_correction = true;
+        bool b_ref = true;
+        bool raw_displacements = false;
+    };
+
     Session();
     ~Session();
 
@@ -108,6 +124,9 @@ public:
     bool IsRunning() const;
 
     ///@}
+
+    ParamsSnapshot GetParamsSnapshot() const;
+    void SetParamsSnapshot(const ParamsSnapshot& params);
 
     // -------------------------------------------------------------------------
     /// @name Scaling
@@ -249,18 +268,21 @@ private:
     /// Calculates the lateral ray displacement caused by refraction through a sample of known
     /// thickness (@p OpticalParameters::t) and refractive index (@p OpticalParameters::n),
     /// then maps that displacement onto the correlation grid in pixel units.
-    void ComputeRefractionCorrection(int h, int w);
+    void ComputeRefractionCorrection(const ParamsSnapshot& params, int h, int w);
 
     /// @brief Subtract the pre-computed correction matrices from all raw_correlation_field entries.
-    void ApplyRefractionCorrection();
+    void ApplyRefractionCorrection(const ParamsSnapshot& params);
 
     /// @brief Build the active reconstruction mask in correlation-grid coordinates.
-    Eigen::MatrixXf GetReconstructionMask(int width, int height);
+    Eigen::MatrixXf GetReconstructionMask(const ParamsSnapshot& params, int width, int height);
 
     /// @brief Dispatch to the selected reconstruction back end.
     Eigen::MatrixXf ReconstructField(const Reconstruction& recon,
                                      const VectorField& field,
-                                     const Eigen::MatrixXf& recon_mask);
+                                     const Eigen::MatrixXf& recon_mask,
+                                     const ParamsSnapshot& params);
+
+    void ScaleFields(const ParamsSnapshot& params);
 
     ///@}
 
@@ -278,6 +300,7 @@ private:
 
     std::atomic<StageState> stagestates[STAGE_TOTAL];
     std::atomic<ReconstructionSolver> reconstruction_solver{RECON_POISSON};
+    mutable std::mutex params_mutex;
 
     // Async
     std::atomic<bool> stop_requested{false};

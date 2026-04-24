@@ -28,6 +28,12 @@ public:
         float eps; ///< Final local CMM residual for the chosen peak representation.
     };
 
+    Correlator(const Correlator&) = delete;
+    Correlator& operator=(const Correlator&) = delete;
+    Correlator(Correlator&&) = delete;
+    Correlator& operator=(Correlator&&) = delete;
+
+
 public:
     //////////////////////////////////////////////////////
     // Construction And Main API

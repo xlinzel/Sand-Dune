@@ -208,50 +208,68 @@ void UI::DrawParametersPanel()
 
     ImGui::Begin("Parameters", nullptr);
     bool controls_disabled = session.IsRunning();
+    auto params = session.GetParamsSnapshot();
+    bool snapshot_changed = false;
+    bool rescale_changed = false;
     if(controls_disabled)
         ImGui::BeginDisabled();
 
     ImGui::SeparatorText("Correlation Parameters");
     ImGui::PushItemWidth(-100.0f);
 
-    ImGui::SliderInt("Window Size", &session.correlatorparameters.window_size, 2, 164);
-    ImGui::SliderInt("Overlap", &session.correlatorparameters.overlap, 0, std::max(0, session.correlatorparameters.window_size - 1));
-    session.correlatorparameters.window_size = std::max(2, session.correlatorparameters.window_size);
-    session.correlatorparameters.overlap = std::clamp(
-        session.correlatorparameters.overlap,
+    bool corr_grid_changed = false;
+    corr_grid_changed |= ImGui::SliderInt("Window Size", &params.correlatorparameters.window_size, 2, 164);
+    corr_grid_changed |= ImGui::SliderInt("Overlap", &params.correlatorparameters.overlap, 0, std::max(0, params.correlatorparameters.window_size - 1));
+    snapshot_changed |= corr_grid_changed;
+    params.correlatorparameters.window_size = std::max(2, params.correlatorparameters.window_size);
+    params.correlatorparameters.overlap = std::clamp(
+        params.correlatorparameters.overlap,
         0,
-        session.correlatorparameters.window_size - 1);
-    ImGui::Checkbox("Window Deformation (PID)", &session.correlatorparameters.enable_pid);
-    if(session.correlatorparameters.enable_pid)
+        params.correlatorparameters.window_size - 1);
+    snapshot_changed |= ImGui::Checkbox("Window Deformation (PID)", &params.correlatorparameters.enable_pid);
+    if(params.correlatorparameters.enable_pid)
     {
-        ImGui::SliderInt("PID Iterations", &session.correlatorparameters.pid_iterations, 1, 4);
-        ImGui::SliderFloat("PID Relaxation", &session.correlatorparameters.pid_relaxation, 0.1f, 1.0f, "%.2f");
+        snapshot_changed |= ImGui::SliderInt("PID Iterations", &params.correlatorparameters.pid_iterations, 1, 4);
+        snapshot_changed |= ImGui::SliderFloat("PID Relaxation", &params.correlatorparameters.pid_relaxation, 0.1f, 1.0f, "%.2f");
         
         ImGui::PopItemWidth();
         ImGui::PushItemWidth(-120.0f);
-        ImGui::SliderInt("PID Smooth Passes", &session.correlatorparameters.pid_smoothing_passes, 0, 3);
+        snapshot_changed |= ImGui::SliderInt("PID Smooth Passes", &params.correlatorparameters.pid_smoothing_passes, 0, 3);
     }
-    session.correlatorparameters.pid_iterations = std::max(0, session.correlatorparameters.pid_iterations);
-    session.correlatorparameters.pid_relaxation = std::clamp(session.correlatorparameters.pid_relaxation, 0.1f, 1.0f);
-    session.correlatorparameters.pid_smoothing_passes = std::max(0, session.correlatorparameters.pid_smoothing_passes);
+    params.correlatorparameters.pid_iterations = std::max(0, params.correlatorparameters.pid_iterations);
+    params.correlatorparameters.pid_relaxation = std::clamp(params.correlatorparameters.pid_relaxation, 0.1f, 1.0f);
+    params.correlatorparameters.pid_smoothing_passes = std::max(0, params.correlatorparameters.pid_smoothing_passes);
+    rescale_changed |= corr_grid_changed;
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Experimental Parameters");
     ImGui::PushItemWidth(-230.0f);
 
-    bool params_changed = false;
-    params_changed |= ImGui::InputFloat("Sensor Pixel Pitch (um)", &session.opticalparameters.P_px, 0.05f);
-    params_changed |= ImGui::InputFloat("Background -> Sample (mm)", &session.opticalparameters.Z_d, 25.0f);
-    params_changed |= ImGui::InputFloat("Sample -> Lens (mm)", &session.opticalparameters.Z_a, 25.0f);
-    params_changed |= ImGui::InputFloat("Lens Focal Length (mm)", &session.opticalparameters.f, 5.0f);
-    ImGui::InputFloat("Aperture Diameter (mm)", &session.opticalparameters.d_a, 1.0f);
+    bool optics_changed = false;
+    optics_changed |= ImGui::InputFloat("Sensor Pixel Pitch (um)", &params.opticalparameters.P_px, 0.05f);
+    optics_changed |= ImGui::InputFloat("Background -> Sample (mm)", &params.opticalparameters.Z_d, 25.0f);
+    optics_changed |= ImGui::InputFloat("Sample -> Lens (mm)", &params.opticalparameters.Z_a, 25.0f);
+    optics_changed |= ImGui::InputFloat("Lens Focal Length (mm)", &params.opticalparameters.f, 5.0f);
+    snapshot_changed |= ImGui::InputFloat("Aperture Diameter (mm)", &params.opticalparameters.d_a, 1.0f);
+    snapshot_changed |= optics_changed;
+    rescale_changed |= optics_changed;
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Reconstruction Mode");
 
     ImGui::TextDisabled("Solve for:");
-    if(ImGui::RadioButton("RI Variation (uniform t)",       session.b_ref == true))  session.b_ref = true;
-    if(ImGui::RadioButton("Thickness Variation (uniform n)", session.b_ref == false)) session.b_ref = false;
+    if(ImGui::RadioButton("RI Variation (uniform t)", params.b_ref == true))
+    {
+        params.b_ref = true;
+        snapshot_changed = true;
+        rescale_changed = true;
+    }
+    if(ImGui::RadioButton("Thickness Variation (uniform n)", params.b_ref == false))
+    {
+        params.b_ref = false;
+        snapshot_changed = true;
+        rescale_changed = true;
+    }
 
     ImGui::TextDisabled("Integrate with:");
     ReconstructionSolver solver = session.GetReconstructionSolver();
@@ -271,29 +289,36 @@ void UI::DrawParametersPanel()
     else
         ImGui::TextDisabled("Mask zeros u and v outside the sample before FC integration.");
 
-    params_changed |= ImGui::Checkbox("Field Correction", &session.n_correction);
+    if(ImGui::Checkbox("Field Correction", &params.n_correction))
+    {
+        snapshot_changed = true;
+        rescale_changed = true;
+    }
 
     ImGui::PushItemWidth(-230.0f);
     
-    params_changed |= ImGui::InputFloat("Sample Thickness (mm)", &session.opticalparameters.t, 0.1f);
+    bool material_changed = false;
+    material_changed |= ImGui::InputFloat("Sample Thickness (mm)", &params.opticalparameters.t, 0.1f);
     ImGui::TextDisabled("Output units: delta-n (dimensionless)");
-    params_changed |= ImGui::InputFloat("Refractive Index (n)", &session.opticalparameters.n, 0.01f);
+    material_changed |= ImGui::InputFloat("Refractive Index (n)", &params.opticalparameters.n, 0.01f);
     ImGui::TextDisabled("Output units: thickness (mm)");
+    snapshot_changed |= material_changed;
+    rescale_changed |= material_changed;
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Mask Parameters");
     ImGui::PushItemWidth(-100.0f);
 
-    ImGui::Checkbox("Mask Enabled", &session.mask_apply);
+    snapshot_changed |= ImGui::Checkbox("Mask Enabled", &params.mask_apply);
 
-    ImGui::SliderInt("X Position", &session.posx, 0, 5640);
-    ImGui::SliderInt("Y Position", &session.posy, 0, 5640);
-    ImGui::SliderInt("Radius", &session.radius, 0, 2820);
+    snapshot_changed |= ImGui::SliderInt("X Position", &params.posx, 0, 5640);
+    snapshot_changed |= ImGui::SliderInt("Y Position", &params.posy, 0, 5640);
+    snapshot_changed |= ImGui::SliderInt("Radius", &params.radius, 0, 2820);
 
     ImGui::PopItemWidth();
     ImGui::SeparatorText("Background Pattern");
     ImGui::PushItemWidth(-230.0f);
-    ImGui::InputFloat("Dot Diameter (mm)", &session.opticalparameters.d_bg, 0.05f);
+    snapshot_changed |= ImGui::InputFloat("Dot Diameter (mm)", &params.opticalparameters.d_bg, 0.05f);
     ImGui::PopItemWidth();
 
     if(controls_disabled)
@@ -301,8 +326,11 @@ void UI::DrawParametersPanel()
 
     ImGui::End();
 
+    if(snapshot_changed)
+        session.SetParamsSnapshot(params);
+
     //Scale fields and null textures so they are rebuilt next frame
-    if(params_changed && !session.IsRunning())
+    if(rescale_changed && !session.IsRunning())
     {
         session.ScaleFields();
         // Null textures so Draw functions rebuild them next frame
@@ -316,7 +344,8 @@ void UI::DrawCalculationsPanel()
 {
     ImGui::Begin("Calculations");
 
-    const auto& op = session.opticalparameters;
+    const auto params = session.GetParamsSnapshot();
+    const auto& op = params.opticalparameters;
 
     const float lambda = 550e-9f;
     float f    = op.f    * 1e-3f;
@@ -358,7 +387,7 @@ void UI::DrawCalculationsPanel()
     int   win      = 16; while(win < (int)(deff_px * 4.0f)) win *= 2;
 
     // Physical size of each output grid cell in the sample plane
-    int   step     = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap);
+    int   step     = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap);
     float res_mm   = step * P_px * Z_a / z_i * 1e3f;
 
     //ImGui::SeparatorText("Inputs Used");
@@ -572,10 +601,14 @@ void UI::DrawVisualizationPanel()
 {
     ImGui::Begin("Visualization");
 
-    bool previous_show_raw = session.raw_displacements;
-    ImGui::Checkbox("Show Correlation/Validation In Raw Pixels", &session.raw_displacements);
-    if(session.raw_displacements != previous_show_raw)
+    auto params = session.GetParamsSnapshot();
+    bool previous_show_raw = params.raw_displacements;
+    if(ImGui::Checkbox("Show Correlation/Validation In Raw Pixels", &params.raw_displacements))
+        session.SetParamsSnapshot(params);
+    if(params.raw_displacements != previous_show_raw)
     {
+        if(!session.IsRunning())
+            session.ScaleFields();
         for(int i = 0; i < correlation_textures.size(); i++) { SDL_DestroyTexture(correlation_textures[i]); correlation_textures[i] = nullptr; }
         for(int i = 0; i < val_textures.size(); i++) { SDL_DestroyTexture(val_textures[i]); val_textures[i] = nullptr; }
     }
@@ -667,6 +700,7 @@ void UI::DrawCorrelation()
     ImGui::Begin("Correlation Results");
 
     const VectorField& field = session.GetCorrelationField();
+    const auto params = session.GetParamsSnapshot();
 
     // --- Rebuild textures if invalidated or colormap range changed ---
     static float last_min[4] = {0,0,0,0}, last_max[4] = {0,0,0,0};
@@ -695,10 +729,10 @@ void UI::DrawCorrelation()
     }
 
     // --- Physical scale: correlation grid spacing -> mm ---
-    float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
-                     / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap)
-                     * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
+    float Z_i      = params.opticalparameters.f * (params.opticalparameters.Z_a + params.opticalparameters.Z_d)
+                     / (params.opticalparameters.Z_a + params.opticalparameters.Z_d - params.opticalparameters.f);
+    float px_to_mm = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap)
+                     * params.opticalparameters.P_px * params.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = field.width  * px_to_mm;
     float field_h_mm = field.height * px_to_mm;
 
@@ -734,7 +768,7 @@ void UI::DrawCorrelation()
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
                 const char* unit = (correlation_map == 3) ? ""
-                                 : session.raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
+                                 : params.raw_displacements ? " px" : params.b_ref ? " dn/dx" : " mm/dx";
                 ImGui::SetTooltip("%.4e%s", (*maps[correlation_map])(row, col), unit);
             }
         }
@@ -833,6 +867,7 @@ void UI::DrawVal()
     ImGui::Begin("Val Results");
 
     const VectorField& field = session.GetValField();
+    const auto params = session.GetParamsSnapshot();
 
     // --- Invalidate textures when Validation reruns ---
     static StageState last_val_state = Idle;
@@ -868,10 +903,10 @@ void UI::DrawVal()
     }
 
     // --- Physical scale: Val cell spacing -> mm ---
-    float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
-                     / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap)
-                     * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
+    float Z_i      = params.opticalparameters.f * (params.opticalparameters.Z_a + params.opticalparameters.Z_d)
+                     / (params.opticalparameters.Z_a + params.opticalparameters.Z_d - params.opticalparameters.f);
+    float px_to_mm = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap)
+                     * params.opticalparameters.P_px * params.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = field.width  * px_to_mm;
     float field_h_mm = field.height * px_to_mm;
 
@@ -907,7 +942,7 @@ void UI::DrawVal()
             if(col >= 0 && col < field.width && row >= 0 && row < field.height)
             {
                 const char* unit = (val_map == 3) ? ""
-                                 : session.raw_displacements ? " px" : session.b_ref ? " dn/dx" : " mm/dx";
+                                 : params.raw_displacements ? " px" : params.b_ref ? " dn/dx" : " mm/dx";
                 ImGui::SetTooltip("%.4e%s", (*maps[val_map])(row, col), unit);
             }
         }
@@ -990,6 +1025,7 @@ void UI::DrawSurf()
     ImGui::Begin("Surface");
 
     const Eigen::MatrixXf& surface = session.GetSurface();
+    const auto params = session.GetParamsSnapshot();
 
     // --- Invalidate texture when reconstruction reruns ---
     static StageState last_recon_state = Idle;
@@ -1015,10 +1051,10 @@ void UI::DrawSurf()
     }
 
     // --- Physical scale: same correlation grid spacing -> mm ---
-    float Z_i      = session.opticalparameters.f * (session.opticalparameters.Z_a + session.opticalparameters.Z_d)
-                     / (session.opticalparameters.Z_a + session.opticalparameters.Z_d - session.opticalparameters.f);
-    float px_to_mm = std::max(1, session.correlatorparameters.window_size - session.correlatorparameters.overlap)
-                     * session.opticalparameters.P_px * session.opticalparameters.Z_a / Z_i / 1000.0f;
+    float Z_i      = params.opticalparameters.f * (params.opticalparameters.Z_a + params.opticalparameters.Z_d)
+                     / (params.opticalparameters.Z_a + params.opticalparameters.Z_d - params.opticalparameters.f);
+    float px_to_mm = std::max(1, params.correlatorparameters.window_size - params.correlatorparameters.overlap)
+                     * params.opticalparameters.P_px * params.opticalparameters.Z_a / Z_i / 1000.0f;
     float field_w_mm = surface.cols() * px_to_mm;
     float field_h_mm = surface.rows() * px_to_mm;
 
@@ -1031,8 +1067,8 @@ void UI::DrawSurf()
     float plot_h     = std::min(avail_h, avail_w * ratio);
     float plot_w     = plot_h / ratio;
 
-    const char* units     = session.b_ref ? "dn" : "mm";
-    const char* scale_lbl = session.b_ref ? "dn" : "t (mm)";
+    const char* units     = params.b_ref ? "dn" : "mm";
+    const char* scale_lbl = params.b_ref ? "dn" : "t (mm)";
 
     // --- Surface plot ---
     if(ImPlot::BeginPlot("##surfplot", ImVec2(plot_w, plot_h), ImPlotFlags_Equal))
@@ -1241,11 +1277,12 @@ void UI::DrawFlowPanel()
 {
 
     ImGui::Begin("Flow Image", nullptr);
+    auto params = session.GetParamsSnapshot();
 
     if(flow_tex)
     {
         //Immovable chiuld is the only way to remove window movement on the main body
-        if(session.mask_apply)
+        if(params.mask_apply)
             ImGui::BeginChild("##flow_content", ImVec2(0, 0), false, ImGuiWindowFlags_NoMove);
 
         float tex_w, tex_h;
@@ -1266,7 +1303,7 @@ void UI::DrawFlowPanel()
         //Interactive circle mask
         //-----------------------------------------------------------------
         
-        if(session.mask_apply)
+        if(params.mask_apply)
         {
             bool image_hovered = ImGui::IsItemHovered(); 
             bool can_edit_mask = !session.IsRunning();
@@ -1276,9 +1313,9 @@ void UI::DrawFlowPanel()
 
             // Map to screen space
             ImVec2 win_center = ImVec2(
-                origin.x + offset.x + session.posx * scale,
-                origin.y + offset.y + session.posy * scale);
-            float screen_radius = session.radius * scale;
+                origin.x + offset.x + params.posx * scale,
+                origin.y + offset.y + params.posy * scale);
+            float screen_radius = params.radius * scale;
 
             // Draw
             draw->AddCircle(win_center, screen_radius, IM_COL32(255, 255, 255, 255), 64, 2.0f);
@@ -1308,17 +1345,19 @@ void UI::DrawFlowPanel()
             {
                 ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
                 ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
-                session.posx += (int)(delta.x / scale);
-                session.posy += (int)(delta.y / scale);
+                params.posx += (int)(delta.x / scale);
+                params.posy += (int)(delta.y / scale);
+                session.SetParamsSnapshot(params);
             }
             if(dragging_radius)
             {
                 int new_radius = (int)(dist_to_center / scale);
-                session.radius = std::max(128, new_radius);
+                params.radius = std::max(128, new_radius);
+                session.SetParamsSnapshot(params);
             }
         }
 
-        if(session.mask_apply)
+        if(params.mask_apply)
             ImGui::EndChild();
     }
     else
@@ -1333,11 +1372,12 @@ void UI::DrawRefPanel()
 {
 
     ImGui::Begin("Reference Image", nullptr);
+    auto params = session.GetParamsSnapshot();
 
     if(ref_tex)
     {
         //Immovable chiuld is the only way to remove window movement on the main body
-        if(session.mask_apply)
+        if(params.mask_apply)
             ImGui::BeginChild("##ref_content", ImVec2(0, 0), false, ImGuiWindowFlags_NoMove);
 
         float tex_w, tex_h;
@@ -1358,7 +1398,7 @@ void UI::DrawRefPanel()
         //Interactive circle mask
         //-----------------------------------------------------------------
         
-        if(session.mask_apply)
+        if(params.mask_apply)
         {
             bool image_hovered = ImGui::IsItemHovered(); 
             bool can_edit_mask = !session.IsRunning();
@@ -1368,9 +1408,9 @@ void UI::DrawRefPanel()
 
             // Map to screen space
             ImVec2 win_center = ImVec2(
-                origin.x + offset.x + session.posx * scale,
-                origin.y + offset.y + session.posy * scale);
-            float screen_radius = session.radius * scale;
+                origin.x + offset.x + params.posx * scale,
+                origin.y + offset.y + params.posy * scale);
+            float screen_radius = params.radius * scale;
 
             // Draw
             draw->AddCircle(win_center, screen_radius, IM_COL32(255, 255, 255, 255), 64, 2.0f);
@@ -1400,17 +1440,19 @@ void UI::DrawRefPanel()
             {
                 ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
                 ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
-                session.posx += (int)(delta.x / scale);
-                session.posy += (int)(delta.y / scale);
+                params.posx += (int)(delta.x / scale);
+                params.posy += (int)(delta.y / scale);
+                session.SetParamsSnapshot(params);
             }
             if(dragging_radius)
             {
                 int new_radius = (int)(dist_to_center / scale);
-                session.radius = std::max(128, new_radius);
+                params.radius = std::max(128, new_radius);
+                session.SetParamsSnapshot(params);
             }
         }
 
-        if(session.mask_apply)
+        if(params.mask_apply)
             ImGui::EndChild();
     }
     else
